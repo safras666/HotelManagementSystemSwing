@@ -1,66 +1,36 @@
 package com.hotel.entity;
 
 public class Room {
-    private int roomId;
+    private int id;
     private String roomNumber;
-    private String typeName;
+    private String roomType;
     private int floor;
-    private String roomStatus;
-    private double pricePerDay;
-    private int maxGuests;
+    private String status;
+    private double price;
+    private int capacity;
+    private String description;
 
     // Конструкторы
     public Room() {}
 
-    public Room(String roomNumber, String typeName, int floor, double price) {
+    public Room(String roomNumber, String roomType, int floor, String status,
+                double price, int capacity, String description) {
         this.roomNumber = roomNumber;
-        this.typeName = typeName;
+        this.roomType = roomType;
         this.floor = floor;
-        this.pricePerDay = price;
-        this.roomStatus = "available";
+        this.status = status;
+        this.price = price;
+        this.capacity = capacity;
+        this.description = description;
     }
 
     // Геттеры и сеттеры
-
-
-    public int getMaxGuests() {
-        return maxGuests;
+    public int getId() {
+        return id;
     }
 
-    public void setMaxGuests(int maxGuests) {
-        this.maxGuests = maxGuests;
-    }
-
-    public double getPricePerDay() {
-        return pricePerDay;
-    }
-
-    public void setPricePerDay(double pricePerDay) {
-        this.pricePerDay = pricePerDay;
-    }
-
-    public String getRoomStatus() {
-        return roomStatus;
-    }
-
-    public void setRoomStatus(String roomStatus) {
-        this.roomStatus = roomStatus;
-    }
-
-    public int getFloor() {
-        return floor;
-    }
-
-    public void setFloor(int floor) {
-        this.floor = floor;
-    }
-
-    public String getTypeName() {
-        return typeName;
-    }
-
-    public void setTypeName(String typeName) {
-        this.typeName = typeName;
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getRoomNumber() {
@@ -71,21 +41,51 @@ public class Room {
         this.roomNumber = roomNumber;
     }
 
-    public int getRoomId() {
-        return roomId;
+    public String getRoomType() {
+        return roomType;
     }
 
-    public void setRoomId(int roomId) {
-        this.roomId = roomId;
+    public void setRoomType(String roomType) {
+        this.roomType = roomType;
     }
 
-    // Вспомогательный метод
-    public String getStatusDisplay() {
-        switch (roomStatus) {
-            case "available": return "Свободен";
-            case "occupied": return "Занят";
-            case "reserved": return "Забронирован";
-            default: return roomStatus;
-        }
+    public int getFloor() {
+        return floor;
+    }
+
+    public void setFloor(int floor) {
+        this.floor = floor;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
+    public int getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(int capacity) {
+        this.capacity = capacity;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 }

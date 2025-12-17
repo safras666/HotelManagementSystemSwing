@@ -1,193 +1,349 @@
 package com.hotel.ui;
 
+import com.hotel.dao.GuestDAO;
+import com.hotel.entity.Guest;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class GuestDialog extends JDialog {
+    private JTextField surnameField;
+    private JTextField nameField;
+    private JTextField patronymicField;
+    private JTextField passportSeriesField;
+    private JTextField passportNumberField;
+    private JTextField phoneField;
+    private JTextField emailField;
+    private JTextField birthDateField;
+    private JTextField addressField;
+
+    private JButton saveButton;
+    private JButton cancelButton;
+
+    private GuestDAO guestDAO;
+    private boolean isEditMode = false;
+    private Guest editingGuest;
+    private MainWindow mainWindow;
     private boolean saved = false;
 
-    // Поля формы
-    private JTextField txtLastName;
-    private JTextField txtFirstName;
-    private JTextField txtMiddleName;
-    private JTextField txtPassportSeries;
-    private JTextField txtPassportNumber;
-    private JTextField txtPhone;
-    private JTextField txtEmail;
-    private JTextField txtBirthDate;
-    private JTextArea txtAddress;
-
-    public GuestDialog(JFrame parent) {
+    public GuestDialog(MainWindow parent, GuestDAO guestDAO) {
         super(parent, "Добавление гостя", true);
-
-        // Настройка диалога
-        setSize(500, 500);
+        this.mainWindow = parent;
+        this.guestDAO = guestDAO;
+        initComponents();
+        pack();
         setLocationRelativeTo(parent);
-
-        // Создание формы
-        createForm();
-
-        // Показать диалог
-        setVisible(true);
     }
 
-    private void createForm() {
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    public GuestDialog(MainWindow parent, GuestDAO guestDAO, Guest guest) {
+        super(parent, "Редактирование гостя", true);
+        this.mainWindow = parent;
+        this.guestDAO = guestDAO;
+        this.editingGuest = guest;
+        this.isEditMode = true;
+        initComponents();
+        fillGuestData();
+        pack();
+        setLocationRelativeTo(parent);
+    }
 
-        // Панель формы
-        JPanel formPanel = new JPanel(new GridBagLayout());
+    private void initComponents() {
+        setLayout(new BorderLayout(10, 10));
+
+        // Основная панель с полями
+        JPanel fieldsPanel = new JPanel();
+        fieldsPanel.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(8, 10, 8, 10);
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
 
         int row = 0;
 
         // Фамилия
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Фамилия*:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        gbc.gridwidth = 1;
+        JLabel surnameLabel = new JLabel("Фамилия*:");
+        surnameLabel.setPreferredSize(new Dimension(180, 25));
+        surnameLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(surnameLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 2;
-        txtLastName = new JTextField(20);
-        formPanel.add(txtLastName, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        surnameField = new JTextField(20);
+        surnameField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(surnameField, gbc);
         row++;
 
         // Имя
-        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 1;
-        formPanel.add(new JLabel("Имя*:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel nameLabel = new JLabel("Имя*:");
+        nameLabel.setPreferredSize(new Dimension(180, 25));
+        nameLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(nameLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 2;
-        txtFirstName = new JTextField(20);
-        formPanel.add(txtFirstName, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        nameField = new JTextField(20);
+        nameField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(nameField, gbc);
         row++;
 
         // Отчество
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Отчество:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel patronymicLabel = new JLabel("Отчество:");
+        patronymicLabel.setPreferredSize(new Dimension(180, 25));
+        patronymicLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(patronymicLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 2;
-        txtMiddleName = new JTextField(20);
-        formPanel.add(txtMiddleName, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        patronymicField = new JTextField(20);
+        patronymicField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(patronymicField, gbc);
         row++;
 
-        // Паспорт (серия)
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Паспорт (серия):"), gbc);
+        // Паспорт (серия и номер)
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel passportLabel = new JLabel("Паспорт:");
+        passportLabel.setPreferredSize(new Dimension(180, 25));
+        passportLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(passportLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 1;
-        txtPassportSeries = new JTextField(4);
-        formPanel.add(txtPassportSeries, gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
 
-        // Паспорт (номер)
-        gbc.gridx = 2;
-        formPanel.add(new JLabel("Номер*:"), gbc);
+        JPanel passportPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        passportSeriesField = new JTextField(4);
+        passportSeriesField.setPreferredSize(new Dimension(60, 30));
+        passportPanel.add(passportSeriesField);
 
-        gbc.gridx = 3; gbc.gridwidth = 1;
-        txtPassportNumber = new JTextField(10);
-        formPanel.add(txtPassportNumber, gbc);
+        passportPanel.add(new JLabel("Серия"));
 
+        passportNumberField = new JTextField(10);
+        passportNumberField.setPreferredSize(new Dimension(120, 30));
+        passportPanel.add(passportNumberField);
+
+        passportPanel.add(new JLabel("Номер*"));
+        fieldsPanel.add(passportPanel, gbc);
         row++;
 
         // Телефон
-        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 1;
-        formPanel.add(new JLabel("Телефон:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel phoneLabel = new JLabel("Телефон:");
+        phoneLabel.setPreferredSize(new Dimension(180, 25));
+        phoneLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(phoneLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 3;
-        txtPhone = new JTextField(20);
-        formPanel.add(txtPhone, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        phoneField = new JTextField(20);
+        phoneField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(phoneField, gbc);
         row++;
 
         // Email
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Email:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel emailLabel = new JLabel("Email:");
+        emailLabel.setPreferredSize(new Dimension(180, 25));
+        emailLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(emailLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 3;
-        txtEmail = new JTextField(20);
-        formPanel.add(txtEmail, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        emailField = new JTextField(20);
+        emailField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(emailField, gbc);
         row++;
 
         // Дата рождения
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Дата рождения* (ДД.ММ.ГГГГ):"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel birthDateLabel = new JLabel("Дата рождения* (ДД.ММ.ГГГГ):");
+        birthDateLabel.setPreferredSize(new Dimension(180, 25));
+        birthDateLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(birthDateLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 3;
-        txtBirthDate = new JTextField(10);
-        formPanel.add(txtBirthDate, gbc);
-
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        birthDateField = new JTextField(20);
+        birthDateField.setPreferredSize(new Dimension(150, 30));
+        fieldsPanel.add(birthDateField, gbc);
         row++;
 
         // Адрес
-        gbc.gridx = 0; gbc.gridy = row;
-        formPanel.add(new JLabel("Адрес:"), gbc);
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        JLabel addressLabel = new JLabel("Адрес:");
+        addressLabel.setPreferredSize(new Dimension(180, 25));
+        addressLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        fieldsPanel.add(addressLabel, gbc);
 
-        gbc.gridx = 1; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.BOTH;
-        txtAddress = new JTextArea(3, 20);
-        txtAddress.setLineWrap(true);
-        JScrollPane scrollPane = new JScrollPane(txtAddress);
-        formPanel.add(scrollPane, gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        addressField = new JTextField(20);
+        addressField.setPreferredSize(new Dimension(250, 30));
+        fieldsPanel.add(addressField, gbc);
+
+        // Добавляем панель с полями в центр
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        centerPanel.add(fieldsPanel, BorderLayout.CENTER);
+        add(centerPanel, BorderLayout.CENTER);
 
         // Панель кнопок
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton saveButton = new JButton("Сохранить");
-        JButton cancelButton = new JButton("Отмена");
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        saveButton = new JButton("Сохранить");
+        cancelButton = new JButton("Отмена");
 
-        saveButton.addActionListener(e -> {
-            if (validateForm()) {
-                saved = true;
-                dispose();
-            }
-        });
-
-        cancelButton.addActionListener(e -> {
-            saved = false;
-            dispose();
-        });
+        saveButton.setPreferredSize(new Dimension(120, 35));
+        cancelButton.setPreferredSize(new Dimension(120, 35));
 
         buttonPanel.add(saveButton);
         buttonPanel.add(cancelButton);
 
-        mainPanel.add(formPanel, BorderLayout.CENTER);
-        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        add(buttonPanel, BorderLayout.SOUTH);
 
-        add(mainPanel);
+        // Обработчики событий
+        saveButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                saveGuest();
+            }
+        });
+
+        cancelButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dispose();
+            }
+        });
+
+        // Настройка клавиш
+        getRootPane().setDefaultButton(saveButton);
+
+        // Минимальный размер диалога
+        setMinimumSize(new Dimension(600, 500));
     }
 
-    private boolean validateForm() {
-        if (txtLastName.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Введите фамилию", "Ошибка", JOptionPane.ERROR_MESSAGE);
-            return false;
+    private void fillGuestData() {
+        if (editingGuest != null) {
+            surnameField.setText(editingGuest.getMiddleName());
+            nameField.setText(editingGuest.getFirstName());
+            patronymicField.setText(editingGuest.getLastName());
+            passportSeriesField.setText(editingGuest.getPassportSeries());
+            passportNumberField.setText(editingGuest.getPassportNumber());
+            phoneField.setText(editingGuest.getPhoneNumber());
+            emailField.setText(editingGuest.getEmail());
+
+            if (editingGuest.getDateOfBirth() != null) {
+                birthDateField.setText(new SimpleDateFormat("dd.MM.yyyy").format(editingGuest.getDateOfBirth()));
+            }
+
+            addressField.setText(editingGuest.getAddress());
+        }
+    }
+
+    private void saveGuest() {
+        // Проверка обязательных полей
+        if (surnameField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, введите фамилию", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            surnameField.requestFocus();
+            return;
         }
 
-        if (txtFirstName.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Введите имя", "Ошибка", JOptionPane.ERROR_MESSAGE);
-            return false;
+        if (nameField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, введите имя", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            nameField.requestFocus();
+            return;
         }
 
-        if (txtPassportNumber.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Введите номер паспорта", "Ошибка", JOptionPane.ERROR_MESSAGE);
-            return false;
+        if (passportNumberField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, введите номер паспорта", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            passportNumberField.requestFocus();
+            return;
         }
 
-        return true;
+        // Проверка даты рождения
+        Date birthDate = null;
+        try {
+            if (!birthDateField.getText().trim().isEmpty()) {
+                birthDate = new SimpleDateFormat("dd.MM.yyyy").parse(birthDateField.getText().trim());
+            } else {
+                JOptionPane.showMessageDialog(this, "Пожалуйста, введите дату рождения", "Ошибка", JOptionPane.ERROR_MESSAGE);
+                birthDateField.requestFocus();
+                return;
+            }
+        } catch (ParseException e) {
+            JOptionPane.showMessageDialog(this, "Неверный формат даты. Используйте ДД.ММ.ГГГГ", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            birthDateField.requestFocus();
+            return;
+        }
+
+        try {
+            Guest guest = new Guest();
+            guest.setMiddleName(surnameField.getText().trim());
+            guest.setFirstName(nameField.getText().trim());
+            guest.setLastName(patronymicField.getText().trim());
+            guest.setPassportSeries(passportSeriesField.getText().trim());
+            guest.setPassportNumber(passportNumberField.getText().trim());
+            guest.setPhoneNumber(phoneField.getText().trim());
+            guest.setEmail(emailField.getText().trim());
+            guest.setDateOfBirth(birthDate);
+            guest.setAddress(addressField.getText().trim());
+
+            if (isEditMode && editingGuest != null) {
+                guest.setGuestId(editingGuest.getGuestId());
+                guestDAO.updateGuest(guest); // Исправлено: updateGuest вместо update
+                JOptionPane.showMessageDialog(this, "Гость успешно обновлен", "Успех", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                guestDAO.addGuest(guest); // Исправлено: addGuest вместо save
+                JOptionPane.showMessageDialog(this, "Гость успешно добавлен", "Успех", JOptionPane.INFORMATION_MESSAGE);
+            }
+
+            saved = true;
+
+            // Обновляем таблицу в главном окне
+            if (mainWindow != null) {
+                mainWindow.refreshGuestsTable();
+            }
+
+            dispose();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Ошибка при сохранении: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
+    }
+
+    // Геттеры для получения данных (если нужно в MainWindow)
+    public String getSurname() {
+        return surnameField.getText();
+    }
+
+    public String getName() {
+        return nameField.getText();
     }
 
     public boolean isSaved() {
         return saved;
     }
-
-    // Геттеры для получения данных
-    public String getLastName() { return txtLastName.getText().trim(); }
-    public String getFirstName() { return txtFirstName.getText().trim(); }
-    public String getMiddleName() { return txtMiddleName.getText().trim(); }
-    public String getPassportSeries() { return txtPassportSeries.getText().trim(); }
-    public String getPassportNumber() { return txtPassportNumber.getText().trim(); }
-    public String getPhone() { return txtPhone.getText().trim(); }
-    public String getEmail() { return txtEmail.getText().trim(); }
-    public String getBirthDate() { return txtBirthDate.getText().trim(); }
-    public String getAddress() { return txtAddress.getText().trim(); }
 }

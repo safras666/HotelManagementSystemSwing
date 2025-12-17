@@ -7,10 +7,14 @@ import com.hotel.entity.Booking;
 import com.hotel.entity.Guest;
 import com.hotel.entity.Room;
 import com.hotel.util.BookingManager;
+import com.hotel.entity.BookingStatusManager;
+import com.hotel.util.StatusSynchronizer;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.SimpleDateFormat;
@@ -21,6 +25,7 @@ public class MainWindow extends JFrame {
     private GuestDAO guestDAO;
     private RoomDAO roomDAO;
     private BookingDAO bookingDAO;
+    private BookingStatusManager bookingStatusManager;
     private DefaultTableModel guestsTableModel;
     private DefaultTableModel roomsTableModel;
     private DefaultTableModel bookingsTableModel;
@@ -30,16 +35,22 @@ public class MainWindow extends JFrame {
     private JTextField guestSearchField;
     private JTextField roomSearchField;
     private BookingManager bookingManager;
+    private StatusSynchronizer statusSynchronizer;
 
     public MainWindow() {
         // Инициализация DAO
         this.guestDAO = new GuestDAO();
         this.roomDAO = new RoomDAO();
         this.bookingDAO = new BookingDAO();
+        this.bookingStatusManager = new BookingStatusManager(bookingDAO, roomDAO);
 
         // Инициализация менеджера бронирований
         this.bookingManager = new BookingManager(bookingDAO, roomDAO);
         bookingManager.startAutoCheck();
+
+        // Инициализация синхронизатора
+        this.statusSynchronizer = new StatusSynchronizer(bookingDAO, roomDAO);
+        statusSynchronizer.startSync();
 
         // Настройка окна
         setTitle("Гостиничная система управления");
@@ -501,11 +512,7 @@ public class MainWindow extends JFrame {
     private JPanel createBookingsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        JPanel topPanel = new JPanel(new BorderLayout());
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-
-        // Кнопки
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton addButton = new JButton("Новое бронирование");
         JButton editButton = new JButton("Редактировать");
         JButton cancelButton = new JButton("Отменить бронь");
@@ -513,22 +520,12 @@ public class MainWindow extends JFrame {
         JButton checkoutButton = new JButton("Выселить");
         JButton refreshButton = new JButton("Обновить");
 
-        buttonPanel.add(addButton);
-        buttonPanel.add(editButton);
-        buttonPanel.add(cancelButton);
-        buttonPanel.add(checkinButton);
-        buttonPanel.add(checkoutButton);
-        buttonPanel.add(refreshButton);
-
-        // Фильтр
-        filterPanel.add(new JLabel("Статус:"));
-        JComboBox<String> statusFilterCombo = new JComboBox<>(
-                new String[]{"Все", "Забронирован", "Заселен", "Выселен", "Отменен"}
-        );
-        filterPanel.add(statusFilterCombo);
-
-        topPanel.add(buttonPanel, BorderLayout.WEST);
-        topPanel.add(filterPanel, BorderLayout.EAST);
+        topPanel.add(addButton);
+        topPanel.add(editButton);
+        topPanel.add(cancelButton);
+        topPanel.add(checkinButton);
+        topPanel.add(checkoutButton);
+        topPanel.add(refreshButton);
 
         // Модель таблицы бронирований
         String[] columns = {"ID", "Гость", "Номер", "Заезд", "Выезд", "Статус", "Стоимость", "Создано"};
@@ -536,6 +533,14 @@ public class MainWindow extends JFrame {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
+            }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 6) { // Стоимость
+                    return Double.class;
+                }
+                return String.class;
             }
         };
 
@@ -557,95 +562,14 @@ public class MainWindow extends JFrame {
         // Заполняем таблицу данными
         refreshBookingsTable();
 
-        // **КОНТЕКСТНОЕ МЕНЮ ДЛЯ ТАБЛИЦЫ БРОНИРОВАНИЙ**
-        JPopupMenu popupMenu = new JPopupMenu();
-
-        JMenuItem editMenuItem = new JMenuItem("Редактировать");
-        JMenuItem cancelMenuItem = new JMenuItem("Отменить бронь");
-        JMenuItem checkinMenuItem = new JMenuItem("Заселить");
-        JMenuItem checkoutMenuItem = new JMenuItem("Выселить");
-        JMenuItem viewHistoryMenuItem = new JMenuItem("История номера");
-
-        // Обработчики для контекстного меню
-        editMenuItem.addActionListener(e -> {
-            // Делегируем действие кнопке "Редактировать"
-            editButton.doClick();
-        });
-
-        cancelMenuItem.addActionListener(e -> {
-            // Делегируем действие кнопке "Отменить бронь"
-            cancelButton.doClick();
-        });
-
-        checkinMenuItem.addActionListener(e -> {
-            // Делегируем действие кнопке "Заселить"
-            checkinButton.doClick();
-        });
-
-        checkoutMenuItem.addActionListener(e -> {
-            // Делегируем действие кнопке "Выселить"
-            checkoutButton.doClick();
-        });
-
-        viewHistoryMenuItem.addActionListener(e -> {
-            int selectedRow = bookingsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                try {
-                    int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-                    Booking booking = bookingDAO.getBookingById(bookingId);
-                    if (booking != null && booking.getRoomId() > 0) {
-                        Room room = roomDAO.getRoomById(booking.getRoomId());
-                        if (room != null) {
-                            RoomHistoryDialog dialog = new RoomHistoryDialog(MainWindow.this, room, bookingDAO);
-                            dialog.setVisible(true);
-                        } else {
-                            JOptionPane.showMessageDialog(MainWindow.this,
-                                    "Не удалось найти информацию о номере",
-                                    "Ошибка", JOptionPane.WARNING_MESSAGE);
-                        }
-                    }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(MainWindow.this,
-                            "Ошибка при открытии истории: " + ex.getMessage(),
-                            "Ошибка", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(MainWindow.this,
-                        "Выберите бронирование для просмотра истории номера",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
-            }
-        });
-
-        // Добавляем пункты в контекстное меню
-        popupMenu.add(editMenuItem);
-        popupMenu.addSeparator();
-        popupMenu.add(cancelMenuItem);
-        popupMenu.add(checkinMenuItem);
-        popupMenu.add(checkoutMenuItem);
-        popupMenu.addSeparator();
-        popupMenu.add(viewHistoryMenuItem);
-
-        // Устанавливаем контекстное меню на таблицу
-        bookingsTable.setComponentPopupMenu(popupMenu);
-
-        // Добавляем слушатель для фильтра
-        statusFilterCombo.addActionListener(e -> {
-            String selectedStatus = (String) statusFilterCombo.getSelectedItem();
-            if ("Все".equals(selectedStatus)) {
-                refreshBookingsTable();
-            } else {
-                filterBookingsByStatus(selectedStatus);
-            }
-        });
-
-        // Обработчики кнопок (основные)
+        // Обработчики кнопок с использованием BookingStatusManager
         addButton.addActionListener(e -> {
             BookingDialog dialog = new BookingDialog(this, bookingDAO, guestDAO, roomDAO);
             dialog.setVisible(true);
-            refreshBookingsTable();
+            refreshAllTables();
         });
 
-        refreshButton.addActionListener(e -> refreshBookingsTable());
+        refreshButton.addActionListener(e -> refreshAllTables());
 
         editButton.addActionListener(e -> {
             int selectedRow = bookingsTable.getSelectedRow();
@@ -654,166 +578,33 @@ public class MainWindow extends JFrame {
                 Booking booking = bookingDAO.getBookingById(bookingId);
                 if (booking != null) {
                     BookingDialog dialog = new BookingDialog(this, bookingDAO,
-                            guestDAO, roomDAO);
+                            guestDAO, roomDAO, booking);
                     dialog.setVisible(true);
-                    refreshBookingsTable();
+                    refreshAllTables();
                 }
             } else {
-                JOptionPane.showMessageDialog(this, "Выберите бронирование для редактирования",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+                showWarning("Выберите бронирование для редактирования");
             }
         });
 
-        cancelButton.addActionListener(e -> {
-            int selectedRow = bookingsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-                Booking booking = bookingDAO.getBookingById(bookingId);
-
-                if (booking != null) {
-                    // Проверяем, можно ли отменить это бронирование
-                    if (!"Забронирован".equals(booking.getStatus())) {
-                        JOptionPane.showMessageDialog(this,
-                                "Можно отменить только бронирования со статусом 'Забронирован'",
-                                "Ошибка", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    int confirm = JOptionPane.showConfirmDialog(this,
-                            "Вы уверены, что хотите отменить бронирование ID: " + bookingId + "?",
-                            "Подтверждение отмены",
-                            JOptionPane.YES_NO_OPTION);
-
-                    if (confirm == JOptionPane.YES_OPTION) {
-                        try {
-                            // Обновляем статус бронирования
-                            bookingDAO.updateBookingStatus(bookingId, "Отменен");
-
-                            // Освобождаем номер (если он был забронирован)
-                            Room room = roomDAO.getRoomById(booking.getRoomId());
-                            if (room != null && "Забронирован".equals(room.getStatus())) {
-                                room.setStatus("Свободен");
-                                roomDAO.updateRoom(room);
-                            }
-
-                            refreshBookingsTable();
-                            refreshRoomsTable();
-                            JOptionPane.showMessageDialog(this,
-                                    "Бронирование отменено",
-                                    "Успех", JOptionPane.INFORMATION_MESSAGE);
-
-                        } catch (Exception ex) {
-                            JOptionPane.showMessageDialog(this,
-                                    "Ошибка при отмене бронирования: " + ex.getMessage(),
-                                    "Ошибка", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Выберите бронирование для отмены",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+        cancelButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleCancelBooking();
             }
         });
 
-        checkinButton.addActionListener(e -> {
-            int selectedRow = bookingsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-                Booking booking = bookingDAO.getBookingById(bookingId);
-
-                if (booking != null) {
-                    if (!"Забронирован".equals(booking.getStatus())) {
-                        JOptionPane.showMessageDialog(this,
-                                "Можно заселить только бронирования со статусом 'Забронирован'",
-                                "Ошибка", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    int confirm = JOptionPane.showConfirmDialog(this,
-                            "Подтвердить заселение гостя " +
-                                    (booking.getGuestSurname() != null ? booking.getGuestSurname() : "") + " " +
-                                    (booking.getGuestName() != null ? booking.getGuestName() : "") + "?",
-                            "Подтверждение заселения",
-                            JOptionPane.YES_NO_OPTION);
-
-                    if (confirm == JOptionPane.YES_OPTION) {
-                        try {
-                            bookingDAO.updateBookingStatus(bookingId, "Заселен");
-
-                            // Меняем статус номера на "Занят"
-                            Room room = roomDAO.getRoomById(booking.getRoomId());
-                            if (room != null) {
-                                room.setStatus("Занят");
-                                roomDAO.updateRoom(room);
-                            }
-
-                            refreshBookingsTable();
-                            refreshRoomsTable();
-                            JOptionPane.showMessageDialog(this,
-                                    "Заселение подтверждено",
-                                    "Успех", JOptionPane.INFORMATION_MESSAGE);
-
-                        } catch (Exception ex) {
-                            JOptionPane.showMessageDialog(this,
-                                    "Ошибка при заселении: " + ex.getMessage(),
-                                    "Ошибка", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Выберите бронирование для заселения",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+        checkinButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleCheckIn();
             }
         });
 
-        checkoutButton.addActionListener(e -> {
-            int selectedRow = bookingsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-                Booking booking = bookingDAO.getBookingById(bookingId);
-
-                if (booking != null) {
-                    if (!"Заселен".equals(booking.getStatus())) {
-                        JOptionPane.showMessageDialog(this,
-                                "Можно выселить только бронирования со статусом 'Заселен'",
-                                "Ошибка", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    int confirm = JOptionPane.showConfirmDialog(this,
-                            "Подтвердить выселение гостя " +
-                                    (booking.getGuestSurname() != null ? booking.getGuestSurname() : "") + " " +
-                                    (booking.getGuestName() != null ? booking.getGuestName() : "") + "?",
-                            "Подтверждение выселения",
-                            JOptionPane.YES_NO_OPTION);
-
-                    if (confirm == JOptionPane.YES_OPTION) {
-                        try {
-                            bookingDAO.updateBookingStatus(bookingId, "Выселен");
-
-                            // Освобождаем номер
-                            Room room = roomDAO.getRoomById(booking.getRoomId());
-                            if (room != null) {
-                                room.setStatus("Свободен");
-                                roomDAO.updateRoom(room);
-                            }
-
-                            refreshBookingsTable();
-                            refreshRoomsTable();
-                            JOptionPane.showMessageDialog(this,
-                                    "Выселение подтверждено",
-                                    "Успех", JOptionPane.INFORMATION_MESSAGE);
-
-                        } catch (Exception ex) {
-                            JOptionPane.showMessageDialog(this,
-                                    "Ошибка при выселении: " + ex.getMessage(),
-                                    "Ошибка", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Выберите бронирование для выселения",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+        checkoutButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleCheckOut();
             }
         });
 
@@ -823,7 +614,209 @@ public class MainWindow extends JFrame {
         return panel;
     }
 
+    // Обработчик отмены бронирования
+    private void handleCancelBooking() {
+        int selectedRow = bookingsTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
 
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Вы уверены, что хотите отменить бронирование ID: " + bookingId +
+                            " для гостя " + guestName + "?",
+                    "Подтверждение отмены",
+                    JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                boolean success = bookingStatusManager.cancelBooking(bookingId);
+
+                if (success) {
+                    showSuccess("Бронирование успешно отменено");
+                    refreshAllTables();
+                } else {
+                    showError("Не удалось отменить бронирование. Проверьте статус.");
+                }
+            }
+        } else {
+            showWarning("Выберите бронирование для отмены");
+        }
+    }
+
+    // Обработчик заселения
+    private void handleCheckIn() {
+        int selectedRow = bookingsTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
+            String roomNumber = (String) bookingsTableModel.getValueAt(selectedRow, 2);
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Подтвердить заселение гостя " + guestName +
+                            " в номер " + roomNumber + "?",
+                    "Подтверждение заселения",
+                    JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                boolean success = bookingStatusManager.checkInBooking(bookingId);
+
+                if (success) {
+                    showSuccess("Гость успешно заселен");
+                    refreshAllTables();
+                } else {
+                    showError("Не удалось заселить гостя. Проверьте статус бронирования.");
+                }
+            }
+        } else {
+            showWarning("Выберите бронирование для заселения");
+        }
+    }
+
+    // Обработчик выселения
+    private void handleCheckOut() {
+        int selectedRow = bookingsTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
+            String roomNumber = (String) bookingsTableModel.getValueAt(selectedRow, 2);
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Подтвердить выселение гостя " + guestName +
+                            " из номера " + roomNumber + "?",
+                    "Подтверждение выселения",
+                    JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                boolean success = bookingStatusManager.checkOutBooking(bookingId);
+
+                if (success) {
+                    showSuccess("Гость успешно выселен");
+                    refreshAllTables();
+                } else {
+                    showError("Не удалось выселить гостя. Проверьте статус бронирования.");
+                }
+            }
+        } else {
+            showWarning("Выберите бронирование для выселения");
+        }
+    }
+
+    // Методы для обновления всех таблиц
+    public void refreshAllTables() {
+        refreshBookingsTable();
+        refreshRoomsTable();
+        refreshGuestsTable();
+    }
+
+    public void refreshBookingsTable() {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    bookingsTableModel.setRowCount(0);
+                    List<Booking> bookings = bookingDAO.getAllBookingsWithDetails();
+
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+                    SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+
+                    for (Booking booking : bookings) {
+                        Object[] row = {
+                                booking.getId(),
+                                formatGuestName(booking.getGuestSurname(), booking.getGuestName()),
+                                booking.getRoomNumber(),
+                                booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
+                                booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
+                                formatStatus(booking.getStatus()),
+                                booking.getTotalPrice(),
+                                booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
+                        };
+                        bookingsTableModel.addRow(row);
+                    }
+
+                    System.out.println("Таблица бронирований обновлена. Записей: " + bookings.size());
+
+                } catch (Exception e) {
+                    System.err.println("Ошибка при обновлении таблицы бронирований: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+
+    public void refreshRoomsTable() {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    roomsTableModel.setRowCount(0);
+                    List<Room> rooms = roomDAO.getAllRooms();
+
+                    for (Room room : rooms) {
+                        Object[] row = {
+                                room.getId(),
+                                room.getRoomNumber(),
+                                room.getRoomType(),
+                                room.getFloor(),
+                                formatStatus(room.getStatus()),
+                                String.format("%.2f руб.", room.getPrice()),
+                                room.getCapacity(),
+                                room.getDescription()
+                        };
+                        roomsTableModel.addRow(row);
+                    }
+
+                    System.out.println("Таблица номеров обновлена. Записей: " + rooms.size());
+
+                } catch (Exception e) {
+                    System.err.println("Ошибка при обновлении таблицы номеров: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+
+    // Вспомогательные методы для форматирования
+    private String formatGuestName(String surname, String name) {
+        if (surname == null && name == null) return "Неизвестно";
+        if (surname == null) return name;
+        if (name == null) return surname;
+        return surname + " " + name;
+    }
+
+    private String formatStatus(String status) {
+        if (status == null) return "";
+
+        switch (status) {
+            case "Забронирован":
+                return "<html><font color='blue'>" + status + "</font></html>";
+            case "Заселен":
+                return "<html><font color='green'>" + status + "</font></html>";
+            case "Выселен":
+                return "<html><font color='gray'>" + status + "</font></html>";
+            case "Отменен":
+                return "<html><font color='red'>" + status + "</font></html>";
+            case "Свободен":
+                return "<html><font color='green'>" + status + "</font></html>";
+            case "Занят":
+                return "<html><font color='red'>" + status + "</font></html>";
+            case "На ремонте":
+                return "<html><font color='orange'>" + status + "</font></html>";
+            default:
+                return status;
+        }
+    }
+
+    // Методы для показа сообщений
+    private void showSuccess(String message) {
+        JOptionPane.showMessageDialog(this, message, "Успех", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Ошибка", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showWarning(String message) {
+        JOptionPane.showMessageDialog(this, message, "Внимание", JOptionPane.WARNING_MESSAGE);
+    }
 
     public void refreshGuestsTable() {
         guestsTableModel.setRowCount(0);
@@ -873,54 +866,6 @@ public class MainWindow extends JFrame {
         }
     }
 
-    public void refreshRoomsTable() {
-        roomsTableModel.setRowCount(0);
-        List<Room> rooms = roomDAO.getAllRooms();
-        for (Room room : rooms) {
-            Object[] row = {
-                    room.getId(),
-                    room.getRoomNumber(),
-                    room.getRoomType(),
-                    room.getFloor(),
-                    room.getStatus(),
-                    String.format("%.2f руб.", room.getPrice()),
-                    room.getCapacity(),
-                    room.getDescription()
-            };
-            roomsTableModel.addRow(row);
-        }
-    }
-
-    public void refreshBookingsTable() {
-        try {
-            bookingsTableModel.setRowCount(0);
-            List<Booking> bookings = bookingDAO.getAllBookings();
-
-            System.out.println("Загружено бронирований: " + bookings.size());
-
-            SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
-            SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
-
-            for (Booking booking : bookings) {
-                Object[] row = {
-                        booking.getId(),
-                        (booking.getGuestSurname() != null ? booking.getGuestSurname() : "") + " " +
-                                (booking.getGuestName() != null ? booking.getGuestName() : ""),
-                        booking.getRoomNumber() != null ? booking.getRoomNumber() : "",
-                        booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
-                        booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
-                        booking.getStatus(),
-                        booking.getTotalPrice(),
-                        booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
-                };
-                bookingsTableModel.addRow(row);
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка при обновлении таблицы бронирований: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     private void updateGuestsTable(List<Guest> guests) {
         guestsTableModel.setRowCount(0);
         for (Guest guest : guests) {
@@ -953,12 +898,19 @@ public class MainWindow extends JFrame {
             roomsTableModel.addRow(row);
         }
     }
+//    @Override
+//    public void dispose() {
+//        bookingManager.stopAutoCheck();
+//        super.dispose();
+//    }
     @Override
     public void dispose() {
-        bookingManager.stopAutoCheck();
+        // Останавливаем синхронизатор при закрытии
+        if (statusSynchronizer != null) {
+            statusSynchronizer.stopSync();
+        }
         super.dispose();
     }
-
     public static void main(String[] args) {
         try {
             UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());

@@ -140,22 +140,85 @@ public class BookingDAO {
         }
     }
 
-    public void updateBookingStatus(int bookingId, String status) {
+    // Улучшенный метод обновления статуса с возвратом результата
+    public boolean updateBookingStatus(int bookingId, String newStatus) {
         String sql = "UPDATE bookings SET status = ?, updated_at = NOW() WHERE id = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, status);
+            pstmt.setString(1, newStatus);
             pstmt.setInt(2, bookingId);
-            pstmt.executeUpdate();
 
-            System.out.println("Статус бронирования обновлен: ID " + bookingId + " -> " + status);
+            int rowsUpdated = pstmt.executeUpdate();
+            System.out.println("Статус бронирования ID " + bookingId + " изменен на: " + newStatus +
+                    " (обновлено строк: " + rowsUpdated + ")");
+
+            return rowsUpdated > 0;
 
         } catch (SQLException e) {
             System.err.println("Ошибка при обновлении статуса бронирования: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
+    }
+
+    // Метод для получения бронирования по ID с полными данными
+    public Booking getBookingByIdWithDetails(int id) {
+        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, " +
+                "r.room_number, r.status as room_status " +
+                "FROM bookings b " +
+                "LEFT JOIN guests g ON b.guest_id = g.id " +
+                "LEFT JOIN rooms r ON b.room_id = r.id " +
+                "WHERE b.id = ?";
+        Booking booking = null;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, id);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                booking = extractBookingFromResultSet(rs);
+                // Добавляем статус комнаты
+                booking.setRoomNumber(rs.getString("room_number"));
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Ошибка при получении бронирования: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return booking;
+    }
+
+    // Метод для получения всех бронирований с деталями
+    public List<Booking> getAllBookingsWithDetails() {
+        List<Booking> bookings = new ArrayList<>();
+        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, " +
+                "r.room_number, r.status as room_status " +
+                "FROM bookings b " +
+                "LEFT JOIN guests g ON b.guest_id = g.id " +
+                "LEFT JOIN rooms r ON b.room_id = r.id " +
+                "ORDER BY b.check_in_date DESC, b.created_at DESC";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                Booking booking = extractBookingFromResultSet(rs);
+                booking.setRoomNumber(rs.getString("room_number"));
+                bookings.add(booking);
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Ошибка при получении всех бронирований: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return bookings;
     }
 
     public void deleteBooking(int id) {
@@ -289,4 +352,5 @@ public class BookingDAO {
 
         return booking;
     }
+
 }

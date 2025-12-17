@@ -71,6 +71,60 @@ public class RoomDAO {
         }
     }
 
+    // Метод для обновления только статуса комнаты
+    public boolean updateRoomStatus(int roomId, String newStatus) {
+        String sql = "UPDATE rooms SET status = ? WHERE id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, newStatus);
+            pstmt.setInt(2, roomId);
+
+            int rowsUpdated = pstmt.executeUpdate();
+            System.out.println("Статус комнаты ID " + roomId + " изменен на: " + newStatus +
+                    " (обновлено строк: " + rowsUpdated + ")");
+
+            return rowsUpdated > 0;
+
+        } catch (SQLException e) {
+            System.err.println("Ошибка при обновлении статуса комнаты: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Метод для синхронизации статуса комнаты на основе бронирований
+    public void syncRoomStatusFromBookings(int roomId) {
+        try {
+            // Получаем активные бронирования для этой комнаты
+            String sql = "SELECT status FROM bookings WHERE room_id = ? AND status IN ('Забронирован', 'Заселен') " +
+                    "ORDER BY check_in_date DESC LIMIT 1";
+
+            try (Connection conn = DatabaseConnection.getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+                pstmt.setInt(1, roomId);
+                ResultSet rs = pstmt.executeQuery();
+
+                if (rs.next()) {
+                    String bookingStatus = rs.getString("status");
+                    String roomStatus = bookingStatus.equals("Заселен") ? "Занят" : "Забронирован";
+                    updateRoomStatus(roomId, roomStatus);
+                    System.out.println("Синхронизирован статус комнаты " + roomId + " на: " + roomStatus);
+                } else {
+                    // Нет активных бронирований - комната свободна
+                    updateRoomStatus(roomId, "Свободен");
+                    System.out.println("Комната " + roomId + " освобождена");
+                }
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Ошибка при синхронизации статуса комнаты: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     public void deleteRoom(int id) {
         String sql = "DELETE FROM rooms WHERE id = ?";
 

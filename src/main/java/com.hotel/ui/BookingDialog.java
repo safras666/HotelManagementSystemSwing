@@ -444,45 +444,83 @@ public class BookingDialog extends JDialog {
                     return;
                 }
             }
+            try {
+                // Создаем бронирование
+                Booking booking = new Booking();
+                booking.setGuestId(selectedGuest.getGuestId());
+                booking.setRoomId(selectedRoom.getId());
+                booking.setCheckInDate(checkIn);
+                booking.setCheckOutDate(checkOut);
+                booking.setStatus(status);
+                booking.setTotalPrice(totalPrice);
 
-            // Создаем бронирование
-            Booking booking = new Booking();
-            booking.setGuestId(selectedGuest.getGuestId());
-            booking.setRoomId(selectedRoom.getId());
-            booking.setCheckInDate(checkIn);
-            booking.setCheckOutDate(checkOut);
-            booking.setStatus(status);
-            booking.setTotalPrice(totalPrice);
+                if (isEditMode && editingBooking != null) {
+                    booking.setId(editingBooking.getId());
+                    bookingDAO.updateBooking(booking);
+                    JOptionPane.showMessageDialog(this,
+                            "Бронирование обновлено",
+                            "Успех", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    bookingDAO.addBooking(booking);
 
-            if (isEditMode && editingBooking != null) {
-                booking.setId(editingBooking.getId());
-                bookingDAO.updateBooking(booking);
-                JOptionPane.showMessageDialog(this,
-                        "Бронирование обновлено",
-                        "Успех", JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                bookingDAO.addBooking(booking);
+                    // Обновляем статус номера
+                    if ("Забронирован".equals(status) || "Заселен".equals(status)) {
+                        selectedRoom.setStatus("Занят");
+                        roomDAO.updateRoom(selectedRoom);
+                    }
 
-                // Обновляем статус номера
-                if ("Забронирован".equals(status) || "Заселен".equals(status)) {
-                    selectedRoom.setStatus("Занят");
-                    roomDAO.updateRoom(selectedRoom);
+                    JOptionPane.showMessageDialog(this,
+                            "Бронирование создано успешно! ID: " + booking.getId(),
+                            "Успех", JOptionPane.INFORMATION_MESSAGE);
                 }
 
+                // Обновляем таблицы в главном окне
+                if (mainWindow != null) {
+                    mainWindow.refreshRoomsTable();
+                    mainWindow.refreshBookingsTable();
+                    System.out.println("Таблицы обновлены");
+                }
+
+                dispose();
+                if (isEditMode && editingBooking != null) {
+                    booking.setId(editingBooking.getId());
+                    bookingDAO.updateBooking(booking);
+
+                    // При редактировании синхронизируем статус комнаты
+                    roomDAO.syncRoomStatusFromBookings(booking.getRoomId());
+
+                    JOptionPane.showMessageDialog(this,
+                            "Бронирование обновлено",
+                            "Успех", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    bookingDAO.addBooking(booking);
+
+                    // При создании нового устанавливаем статус комнаты
+                    if ("Забронирован".equals(status)) {
+                        roomDAO.updateRoomStatus(selectedRoom.getId(), "Забронирован");
+                    } else if ("Заселен".equals(status)) {
+                        roomDAO.updateRoomStatus(selectedRoom.getId(), "Занят");
+                    }
+
+                    JOptionPane.showMessageDialog(this,
+                            "Бронирование создано успешно",
+                            "Успех", JOptionPane.INFORMATION_MESSAGE);
+                }
+
+                // Сообщаем MainWindow об обновлении
+                if (mainWindow != null) {
+                    mainWindow.refreshAllTables();
+                }
+
+                dispose();
+
+            } catch (Exception e) {
+                System.err.println("Ошибка при сохранении бронирования: " + e.getMessage());
+                e.printStackTrace();
                 JOptionPane.showMessageDialog(this,
-                        "Бронирование создано успешно! ID: " + booking.getId(),
-                        "Успех", JOptionPane.INFORMATION_MESSAGE);
+                        "Ошибка при сохранении: " + e.getMessage(),
+                        "Ошибка", JOptionPane.ERROR_MESSAGE);
             }
-
-            // Обновляем таблицы в главном окне
-            if (mainWindow != null) {
-                mainWindow.refreshRoomsTable();
-                mainWindow.refreshBookingsTable();
-                System.out.println("Таблицы обновлены");
-            }
-
-            dispose();
-
         } catch (Exception e) {
             System.err.println("Ошибка при сохранении бронирования: " + e.getMessage());
             e.printStackTrace();

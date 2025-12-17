@@ -23,6 +23,7 @@ public class RoomHistoryDialog extends JDialog {
     private JButton calculateRevenueButton;
     private JLabel roomInfoLabel;
     private JLabel revenueLabel;
+    private Timer refreshTimer;
 
     private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
     private SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
@@ -150,30 +151,75 @@ public class RoomHistoryDialog extends JDialog {
 
         add(statsPanelBottom, BorderLayout.SOUTH);
 
+        // Добавляем автоматическое обновление каждые 5 секунд
+        refreshTimer = new Timer(5000, new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                loadHistory();
+            }
+        });
+        refreshTimer.start();
+
+        // Останавливаем таймер при закрытии окна
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+                if (refreshTimer != null) {
+                    refreshTimer.stop();
+                }
+            }
+        });
+
         // Настройка клавиш
         getRootPane().setDefaultButton(closeButton);
     }
 
     private void loadHistory() {
-        tableModel.setRowCount(0);
-        List<Booking> bookings = bookingDAO.getBookingsByRoomId(room.getId());
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    tableModel.setRowCount(0);
+                    List<Booking> bookings = bookingDAO.getBookingsByRoomId(room.getId());
 
-        for (Booking booking : bookings) {
-            Object[] row = {
-                    booking.getId(),
-                    dateFormat.format(booking.getCheckInDate()),
-                    dateFormat.format(booking.getCheckOutDate()),
-                    booking.getGuestSurname() + " " + booking.getGuestName(),
-                    getStatusWithColor(booking.getStatus()),
-                    booking.getTotalPrice(),
-                    booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : "",
-                    booking.getUpdatedAt() != null ? datetimeFormat.format(booking.getUpdatedAt()) : ""
-            };
-            tableModel.addRow(row);
+                    for (Booking booking : bookings) {
+                        Object[] row = {
+                                booking.getId(),
+                                dateFormat.format(booking.getCheckInDate()),
+                                dateFormat.format(booking.getCheckOutDate()),
+                                booking.getGuestSurname() + " " + booking.getGuestName(),
+                                formatStatus(booking.getStatus()),
+                                booking.getTotalPrice(),
+                                booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : "",
+                                booking.getUpdatedAt() != null ? datetimeFormat.format(booking.getUpdatedAt()) : ""
+                        };
+                        tableModel.addRow(row);
+                    }
+
+                    // Обновляем статистику
+                    updateStatistics();
+
+                } catch (Exception e) {
+                    System.err.println("Ошибка при загрузке истории: " + e.getMessage());
+                }
+            }
+        });
+    }
+    private String formatStatus(String status) {
+        if (status == null) return "";
+
+        switch (status) {
+            case "Забронирован":
+                return "<html><font color='blue'>" + status + "</font></html>";
+            case "Заселен":
+                return "<html><font color='green'>" + status + "</font></html>";
+            case "Выселен":
+                return "<html><font color='gray'>" + status + "</font></html>";
+            case "Отменен":
+                return "<html><font color='red'>" + status + "</font></html>";
+            default:
+                return status;
         }
-
-        // Обновляем статистику
-        updateStatistics();
     }
 
     private String getStatusWithColor(String status) {

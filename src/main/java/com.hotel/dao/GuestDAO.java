@@ -139,9 +139,9 @@ public class GuestDAO {
     private Guest extractGuestFromResultSet(ResultSet rs) throws SQLException {
         Guest guest = new Guest();
         guest.setGuestId(rs.getInt("id"));
-        guest.setMiddleName(rs.getString("surname"));
+        guest.setMiddleName(rs.getString("patronymic"));
         guest.setFirstName(rs.getString("name"));
-        guest.setLastName(rs.getString("patronymic"));
+        guest.setLastName(rs.getString("surname"));
         guest.setPassportSeries(rs.getString("passport_series"));
         guest.setPassportNumber(rs.getString("passport_number"));
         guest.setPhoneNumber(rs.getString("phone"));
@@ -152,9 +152,9 @@ public class GuestDAO {
     }
 
     private void setGuestParameters(PreparedStatement pstmt, Guest guest) throws SQLException {
-        pstmt.setString(1, guest.getMiddleName());
+        pstmt.setString(1, guest.getLastName());
         pstmt.setString(2, guest.getFirstName());
-        pstmt.setString(3, guest.getLastName());
+        pstmt.setString(3, guest.getMiddleName());
         pstmt.setString(4, guest.getPassportSeries());
         pstmt.setString(5, guest.getPassportNumber());
         pstmt.setString(6, guest.getPhoneNumber());

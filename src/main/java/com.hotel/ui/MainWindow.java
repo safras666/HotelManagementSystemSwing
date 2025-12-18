@@ -9,17 +9,24 @@ import com.hotel.entity.Room;
 import com.hotel.util.BookingManager;
 import com.hotel.entity.BookingStatusManager;
 import com.hotel.util.StatusSynchronizer;
+import com.hotel.ui.GuestStatisticsDialog;
+import com.hotel.ui.RoomStatisticsDialog;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+
 
 public class MainWindow extends JFrame {
     private GuestDAO guestDAO;
@@ -34,8 +41,15 @@ public class MainWindow extends JFrame {
     private JTable bookingsTable;
     private JTextField guestSearchField;
     private JTextField roomSearchField;
+    private JTextField bookingSearchField;
     private BookingManager bookingManager;
     private StatusSynchronizer statusSynchronizer;
+    private TableRowSorter<DefaultTableModel> bookingsTableSorter;
+    private JComboBox<String> statusFilterCombo;
+    private JComboBox<String> sortCombo;
+    private JCheckBox showActiveOnlyCheckbox;
+    private JComboBox<String> roomStatusFilterCombo;
+
 
     public MainWindow() {
         // Инициализация DAO
@@ -54,7 +68,8 @@ public class MainWindow extends JFrame {
 
         // Настройка окна
         setTitle("Гостиничная система управления");
-        setSize(1200, 800);
+        setSize(1000, 700);
+        setMinimumSize(new Dimension(1000, 700)); // Минимальный размер окна
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -141,13 +156,14 @@ public class MainWindow extends JFrame {
         JPanel statsPanel = new JPanel(new GridLayout(2, 3, 10, 10));
         statsPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
+
         // Карточки статистики
-        JPanel guestCard = createStatCard("Гости", "👤", Color.BLUE);
-        JPanel roomCard = createStatCard("Номера", "🏨", Color.GREEN);
-        JPanel bookingCard = createStatCard("Бронирования", "📅", Color.ORANGE);
-        JPanel revenueCard = createStatCard("Доход", "💰", Color.MAGENTA);
-        JPanel occupiedCard = createStatCard("Занято", "🔴", Color.RED);
-        JPanel freeCard = createStatCard("Свободно", "🟢", new Color(34, 139, 34));
+        JPanel guestCard = createStatCard("Гости", "☺", Color.BLUE);
+        JPanel roomCard = createStatCard("Номера", "№", Color.GREEN);
+        JPanel bookingCard = createStatCard("Бронирования", "√", Color.ORANGE);
+        JPanel revenueCard = createStatCard("Доход", "₽", Color.MAGENTA);
+        JPanel occupiedCard = createStatCard("Занято", "●", Color.RED);
+        JPanel freeCard = createStatCard("Свободно", "○", new Color(34, 139, 34));
 
         statsPanel.add(guestCard);
         statsPanel.add(roomCard);
@@ -253,27 +269,46 @@ public class MainWindow extends JFrame {
     private JPanel createGuestsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        // Верхняя панель с кнопками
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // Верхняя панель с кнопками - компактное расположение
+        JPanel topPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Первый ряд: кнопки действий
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0;
         JButton addButton = new JButton("Добавить гостя");
+        topPanel.add(addButton, gbc);
+
+        gbc.gridx = 1;
         JButton editButton = new JButton("Редактировать");
+        topPanel.add(editButton, gbc);
+
+        gbc.gridx = 2;
         JButton deleteButton = new JButton("Удалить");
+        topPanel.add(deleteButton, gbc);
+
+        gbc.gridx = 3;
         JButton refreshButton = new JButton("Обновить");
+        topPanel.add(refreshButton, gbc);
 
-        topPanel.add(addButton);
-        topPanel.add(editButton);
-        topPanel.add(deleteButton);
-        topPanel.add(refreshButton);
+        // Второй ряд: поиск
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 4; // занимает 4 колонки
+        gbc.weightx = 1.0;
 
-        // Панель поиска
-        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         searchPanel.add(new JLabel("Поиск:"));
         guestSearchField = new JTextField(20);
-        JButton searchButton = new JButton("Найти");
         searchPanel.add(guestSearchField);
+
+        JButton searchButton = new JButton("Найти");
         searchPanel.add(searchButton);
 
-        topPanel.add(searchPanel);
+        topPanel.add(searchPanel, gbc);
 
         // Модель таблицы гостей
         String[] columns = {"ID", "Фамилия", "Имя", "Отчество", "Телефон", "Email", "Паспорт"};
@@ -343,6 +378,32 @@ public class MainWindow extends JFrame {
             }
         });
 
+        // В методе createGuestsPanel() класса MainWindow, после создания таблицы guestsTable:
+
+// Добавляем обработчик двойного щелчка для открытия статистики гостя
+        guestsTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int selectedRow = guestsTable.getSelectedRow();
+                    if (selectedRow >= 0) {
+                        int guestId = (int) guestsTableModel.getValueAt(selectedRow, 0);
+                        Guest guest = guestDAO.getGuestById(guestId);
+                        if (guest != null) {
+                            GuestStatisticsDialog dialog = new GuestStatisticsDialog(
+                                    MainWindow.this,
+                                    guest,
+                                    guestDAO,
+                                    bookingDAO,
+                                    roomDAO
+                            );
+                            dialog.setVisible(true);
+                        }
+                    }
+                }
+            }
+        });
+
         panel.add(topPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
 
@@ -352,34 +413,62 @@ public class MainWindow extends JFrame {
     private JPanel createRoomsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        // Верхняя панель с кнопками
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // Верхняя панель с кнопками - компактное расположение
+        JPanel topPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Первый ряд: кнопки действий
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0;
         JButton addButton = new JButton("Добавить номер");
+        topPanel.add(addButton, gbc);
+
+        gbc.gridx = 1;
         JButton editButton = new JButton("Редактировать");
+        topPanel.add(editButton, gbc);
+
+        gbc.gridx = 2;
         JButton deleteButton = new JButton("Удалить");
+        topPanel.add(deleteButton, gbc);
+
+        gbc.gridx = 3;
         JButton refreshButton = new JButton("Обновить");
+        topPanel.add(refreshButton, gbc);
+
+        gbc.gridx = 4;
         JButton historyButton = new JButton("История");
+        topPanel.add(historyButton, gbc);
 
-        topPanel.add(addButton);
-        topPanel.add(editButton);
-        topPanel.add(deleteButton);
-        topPanel.add(refreshButton);
-        topPanel.add(historyButton);
+        // Второй ряд: фильтры и поиск
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 5; // занимает 5 колонок
+        gbc.weightx = 1.0;
 
-        // Панель фильтрации и поиска
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        filterPanel.setBorder(BorderFactory.createTitledBorder("Фильтры"));
+
+        // Фильтр по статусу
         filterPanel.add(new JLabel("Статус:"));
-        JComboBox<String> statusFilterCombo = new JComboBox<>(new String[]{"Все", "Свободен", "Занят", "На ремонте", "Забронирован"});
-        filterPanel.add(statusFilterCombo);
+        roomStatusFilterCombo = new JComboBox<>(new String[]{"Все", "Свободен", "Занят", "На ремонте", "Забронирован"});
+        filterPanel.add(roomStatusFilterCombo);
 
+        // Поиск
         filterPanel.add(Box.createHorizontalStrut(20));
         filterPanel.add(new JLabel("Поиск:"));
         roomSearchField = new JTextField(15);
-        JButton searchButton = new JButton("Найти");
         filterPanel.add(roomSearchField);
+
+        JButton searchButton = new JButton("Найти");
         filterPanel.add(searchButton);
 
-        topPanel.add(filterPanel);
+        JButton clearFilterButton = new JButton("Сбросить");
+        filterPanel.add(clearFilterButton);
+
+        topPanel.add(filterPanel, gbc);
 
         // Модель таблицы номеров
         String[] columns = {"ID", "Номер", "Тип", "Этаж", "Статус", "Цена", "Вместимость", "Описание"};
@@ -464,7 +553,8 @@ public class MainWindow extends JFrame {
             }
         });
 
-        // Добавляем обработчик двойного щелчка
+        // В методе createRoomsPanel() найдите существующий обработчик и замените его:
+
         roomsTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -474,7 +564,12 @@ public class MainWindow extends JFrame {
                         int roomId = (int) roomsTableModel.getValueAt(selectedRow, 0);
                         Room room = roomDAO.getRoomById(roomId);
                         if (room != null) {
-                            RoomHistoryDialog dialog = new RoomHistoryDialog(MainWindow.this, room, bookingDAO);
+                            RoomStatisticsDialog dialog = new RoomStatisticsDialog(
+                                    MainWindow.this,
+                                    room,
+                                    roomDAO,
+                                    bookingDAO
+                            );
                             dialog.setVisible(true);
                         }
                     }
@@ -482,8 +577,8 @@ public class MainWindow extends JFrame {
             }
         });
 
-        statusFilterCombo.addActionListener(e -> {
-            String selectedStatus = (String) statusFilterCombo.getSelectedItem();
+        roomStatusFilterCombo.addActionListener(e -> {
+            String selectedStatus = (String) roomStatusFilterCombo.getSelectedItem();
             if ("Все".equals(selectedStatus)) {
                 refreshRoomsTable();
             } else {
@@ -503,6 +598,12 @@ public class MainWindow extends JFrame {
             }
         });
 
+        clearFilterButton.addActionListener(e -> {
+            roomStatusFilterCombo.setSelectedIndex(0);
+            roomSearchField.setText("");
+            refreshRoomsTable();
+        });
+
         panel.add(topPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
 
@@ -512,22 +613,81 @@ public class MainWindow extends JFrame {
     private JPanel createBookingsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // Верхняя панель с кнопками действий - компактное расположение
+        JPanel topPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Первый ряд: кнопки действий
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0;
         JButton addButton = new JButton("Новое бронирование");
+        topPanel.add(addButton, gbc);
+
+        gbc.gridx = 1;
         JButton editButton = new JButton("Редактировать");
+        topPanel.add(editButton, gbc);
+
+        gbc.gridx = 2;
         JButton cancelButton = new JButton("Отменить бронь");
+        topPanel.add(cancelButton, gbc);
+
+        gbc.gridx = 3;
         JButton checkinButton = new JButton("Заселить");
+        topPanel.add(checkinButton, gbc);
+
+        gbc.gridx = 4;
         JButton checkoutButton = new JButton("Выселить");
+        topPanel.add(checkoutButton, gbc);
+
+        gbc.gridx = 5;
         JButton refreshButton = new JButton("Обновить");
+        topPanel.add(refreshButton, gbc);
 
-        topPanel.add(addButton);
-        topPanel.add(editButton);
-        topPanel.add(cancelButton);
-        topPanel.add(checkinButton);
-        topPanel.add(checkoutButton);
-        topPanel.add(refreshButton);
+        // Второй ряд: фильтры и поиск
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 6; // занимает все 6 колонок
+        gbc.weightx = 1.0;
 
-        // Модель таблицы бронирований
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        filterPanel.setBorder(BorderFactory.createTitledBorder("Фильтры и сортировка"));
+
+        // Фильтр по статусу
+        filterPanel.add(new JLabel("Статус:"));
+        statusFilterCombo = new JComboBox<>(new String[]{"Все статусы", "Забронирован", "Заселен", "Выселен", "Отменен"});
+        filterPanel.add(statusFilterCombo);
+
+        // Сортировка
+        filterPanel.add(new JLabel("Сортировка:"));
+        sortCombo = new JComboBox<>(new String[]{"По дате заезда (новые)", "По дате заезда (старые)",
+                "По дате выезда", "По стоимости (убыв.)",
+                "По стоимости (возр.)", "По ID"});
+        filterPanel.add(sortCombo);
+
+        // Чекбокс "Только активные"
+        showActiveOnlyCheckbox = new JCheckBox("Только активные");
+        filterPanel.add(showActiveOnlyCheckbox);
+
+        // Поиск
+        filterPanel.add(new JLabel("Поиск:"));
+        bookingSearchField = new JTextField(15);
+        filterPanel.add(bookingSearchField);
+
+        JButton searchButton = new JButton("Найти");
+        filterPanel.add(searchButton);
+
+        JButton clearFiltersButton = new JButton("Сбросить");
+        filterPanel.add(clearFiltersButton);
+
+        topPanel.add(filterPanel, gbc);
+
+        // Основная панель с таблицей
+        panel.add(topPanel, BorderLayout.NORTH);
+
+        // Модель таблицы бронирований с правильными типами данных
         String[] columns = {"ID", "Гость", "Номер", "Заезд", "Выезд", "Статус", "Стоимость", "Создано"};
         bookingsTableModel = new DefaultTableModel(columns, 0) {
             @Override
@@ -537,10 +697,14 @@ public class MainWindow extends JFrame {
 
             @Override
             public Class<?> getColumnClass(int columnIndex) {
-                if (columnIndex == 6) { // Стоимость
-                    return Double.class;
+                switch (columnIndex) {
+                    case 0:  // ID
+                        return Integer.class;
+                    case 6:  // Стоимость
+                        return Double.class;
+                    default: // Все остальные колонки
+                        return String.class;
                 }
-                return String.class;
             }
         };
 
@@ -548,6 +712,62 @@ public class MainWindow extends JFrame {
         bookingsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         bookingsTable.getTableHeader().setReorderingAllowed(false);
 
+        // Настройка сортировки таблицы с кастомными компараторами
+        bookingsTableSorter = new TableRowSorter<>(bookingsTableModel);
+
+        // Установка компараторов для разных типов данных
+        bookingsTableSorter.setComparator(0, Comparator.comparingInt(o -> (Integer) o)); // ID
+        bookingsTableSorter.setComparator(6, Comparator.comparingDouble(o -> (Double) o)); // Стоимость
+
+        // Компараторы для дат (строки в формате dd.MM.yyyy)
+        bookingsTableSorter.setComparator(3, new Comparator<String>() {
+            private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+
+            @Override
+            public int compare(String s1, String s2) {
+                try {
+                    Date d1 = dateFormat.parse(s1);
+                    Date d2 = dateFormat.parse(s2);
+                    return d1.compareTo(d2);
+                } catch (ParseException e) {
+                    return s1.compareTo(s2);
+                }
+            }
+        });
+
+        bookingsTableSorter.setComparator(4, new Comparator<String>() {
+            private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+
+            @Override
+            public int compare(String s1, String s2) {
+                try {
+                    Date d1 = dateFormat.parse(s1);
+                    Date d2 = dateFormat.parse(s2);
+                    return d1.compareTo(d2);
+                } catch (ParseException e) {
+                    return s1.compareTo(s2);
+                }
+            }
+        });
+
+        bookingsTableSorter.setComparator(7, new Comparator<String>() {
+            private SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+
+            @Override
+            public int compare(String s1, String s2) {
+                try {
+                    Date d1 = datetimeFormat.parse(s1);
+                    Date d2 = datetimeFormat.parse(s2);
+                    return d1.compareTo(d2);
+                } catch (ParseException e) {
+                    return s1.compareTo(s2);
+                }
+            }
+        });
+
+        bookingsTable.setRowSorter(bookingsTableSorter);
+
+        // Настройка ширины колонок
         bookingsTable.getColumnModel().getColumn(0).setPreferredWidth(50);
         bookingsTable.getColumnModel().getColumn(1).setPreferredWidth(150);
         bookingsTable.getColumnModel().getColumn(2).setPreferredWidth(80);
@@ -558,11 +778,12 @@ public class MainWindow extends JFrame {
         bookingsTable.getColumnModel().getColumn(7).setPreferredWidth(120);
 
         JScrollPane scrollPane = new JScrollPane(bookingsTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
         // Заполняем таблицу данными
         refreshBookingsTable();
 
-        // Обработчики кнопок с использованием BookingStatusManager
+        // Обработчики кнопок действий
         addButton.addActionListener(e -> {
             BookingDialog dialog = new BookingDialog(this, bookingDAO, guestDAO, roomDAO);
             dialog.setVisible(true);
@@ -574,7 +795,8 @@ public class MainWindow extends JFrame {
         editButton.addActionListener(e -> {
             int selectedRow = bookingsTable.getSelectedRow();
             if (selectedRow >= 0) {
-                int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
+                int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+                int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
                 Booking booking = bookingDAO.getBookingById(bookingId);
                 if (booking != null) {
                     BookingDialog dialog = new BookingDialog(this, bookingDAO,
@@ -587,39 +809,132 @@ public class MainWindow extends JFrame {
             }
         });
 
-        cancelButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                handleCancelBooking();
-            }
-        });
+        cancelButton.addActionListener(e -> handleCancelBooking());
+        checkinButton.addActionListener(e -> handleCheckIn());
+        checkoutButton.addActionListener(e -> handleCheckOut());
 
-        checkinButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                handleCheckIn();
-            }
-        });
+        // Обработчики фильтров и сортировки
+        statusFilterCombo.addActionListener(e -> applyFilters());
+        sortCombo.addActionListener(e -> applySorting());
+        showActiveOnlyCheckbox.addActionListener(e -> applyFilters());
 
-        checkoutButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                handleCheckOut();
-            }
-        });
-
-        panel.add(topPanel, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
+        searchButton.addActionListener(e -> applySearchFilter());
+        clearFiltersButton.addActionListener(e -> clearFilters());
+        bookingSearchField.addActionListener(e -> applySearchFilter());
 
         return panel;
+    }
+
+    // Метод применения фильтров
+    private void applyFilters() {
+        String statusFilter = (String) statusFilterCombo.getSelectedItem();
+        boolean activeOnly = showActiveOnlyCheckbox.isSelected();
+
+        List<Booking> allBookings = bookingDAO.getAllBookingsWithDetails();
+        List<Booking> filteredBookings = new ArrayList<>();
+
+        for (Booking booking : allBookings) {
+            boolean statusMatch = "Все статусы".equals(statusFilter) ||
+                    booking.getStatus().equals(statusFilter);
+
+            boolean activeMatch = !activeOnly ||
+                    ("Забронирован".equals(booking.getStatus()) ||
+                            "Заселен".equals(booking.getStatus()));
+
+            if (statusMatch && activeMatch) {
+                filteredBookings.add(booking);
+            }
+        }
+
+        updateBookingsTable(filteredBookings);
+    }
+
+    // Метод применения сортировки
+    private void applySorting() {
+        String sortOption = (String) sortCombo.getSelectedItem();
+
+        switch (sortOption) {
+            case "По дате заезда (новые)":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(3, SortOrder.DESCENDING)
+                ));
+                break;
+            case "По дате заезда (старые)":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(3, SortOrder.ASCENDING)
+                ));
+                break;
+            case "По дате выезда":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(4, SortOrder.ASCENDING)
+                ));
+                break;
+            case "По стоимости (убыв.)":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(6, SortOrder.DESCENDING)
+                ));
+                break;
+            case "По стоимости (возр.)":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(6, SortOrder.ASCENDING)
+                ));
+                break;
+            case "По ID":
+                bookingsTableSorter.setSortKeys(java.util.Arrays.asList(
+                        new RowSorter.SortKey(0, SortOrder.ASCENDING)
+                ));
+                break;
+        }
+    }
+
+    // Метод применения поискового фильтра
+    private void applySearchFilter() {
+        String searchTerm = bookingSearchField.getText().trim().toLowerCase();
+
+        if (searchTerm.isEmpty()) {
+            applyFilters();
+            return;
+        }
+
+        List<Booking> allBookings = bookingDAO.getAllBookingsWithDetails();
+        List<Booking> filteredBookings = new ArrayList<>();
+
+        for (Booking booking : allBookings) {
+            // Проверяем совпадение по различным полям
+            boolean matches = (booking.getGuestSurname() != null &&
+                    booking.getGuestSurname().toLowerCase().contains(searchTerm)) ||
+                    (booking.getGuestName() != null &&
+                            booking.getGuestName().toLowerCase().contains(searchTerm)) ||
+                    (booking.getRoomNumber() != null &&
+                            booking.getRoomNumber().toLowerCase().contains(searchTerm)) ||
+                    (String.valueOf(booking.getId()).contains(searchTerm)) ||
+                    (booking.getStatus() != null &&
+                            booking.getStatus().toLowerCase().contains(searchTerm));
+
+            if (matches) {
+                filteredBookings.add(booking);
+            }
+        }
+
+        updateBookingsTable(filteredBookings);
+    }
+
+    // Метод сброса всех фильтров
+    private void clearFilters() {
+        statusFilterCombo.setSelectedIndex(0);
+        sortCombo.setSelectedIndex(0);
+        showActiveOnlyCheckbox.setSelected(false);
+        bookingSearchField.setText("");
+        refreshBookingsTable();
     }
 
     // Обработчик отмены бронирования
     private void handleCancelBooking() {
         int selectedRow = bookingsTable.getSelectedRow();
         if (selectedRow >= 0) {
-            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
+            int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+            int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(modelRow, 1);
 
             int confirm = JOptionPane.showConfirmDialog(this,
                     "Вы уверены, что хотите отменить бронирование ID: " + bookingId +
@@ -646,9 +961,10 @@ public class MainWindow extends JFrame {
     private void handleCheckIn() {
         int selectedRow = bookingsTable.getSelectedRow();
         if (selectedRow >= 0) {
-            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
-            String roomNumber = (String) bookingsTableModel.getValueAt(selectedRow, 2);
+            int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+            int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(modelRow, 1);
+            String roomNumber = (String) bookingsTableModel.getValueAt(modelRow, 2);
 
             int confirm = JOptionPane.showConfirmDialog(this,
                     "Подтвердить заселение гостя " + guestName +
@@ -675,9 +991,10 @@ public class MainWindow extends JFrame {
     private void handleCheckOut() {
         int selectedRow = bookingsTable.getSelectedRow();
         if (selectedRow >= 0) {
-            int bookingId = (int) bookingsTableModel.getValueAt(selectedRow, 0);
-            String guestName = (String) bookingsTableModel.getValueAt(selectedRow, 1);
-            String roomNumber = (String) bookingsTableModel.getValueAt(selectedRow, 2);
+            int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+            int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
+            String guestName = (String) bookingsTableModel.getValueAt(modelRow, 1);
+            String roomNumber = (String) bookingsTableModel.getValueAt(modelRow, 2);
 
             int confirm = JOptionPane.showConfirmDialog(this,
                     "Подтвердить выселение гостя " + guestName +
@@ -708,68 +1025,84 @@ public class MainWindow extends JFrame {
     }
 
     public void refreshBookingsTable() {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    bookingsTableModel.setRowCount(0);
-                    List<Booking> bookings = bookingDAO.getAllBookingsWithDetails();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                List<Booking> bookings = bookingDAO.getAllBookingsWithDetails();
+                updateBookingsTable(bookings);
 
-                    SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
-                    SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+                // Сбрасываем фильтры к начальному состоянию
+                statusFilterCombo.setSelectedIndex(0);
+                sortCombo.setSelectedIndex(0);
+                showActiveOnlyCheckbox.setSelected(false);
+                bookingSearchField.setText("");
 
-                    for (Booking booking : bookings) {
-                        Object[] row = {
-                                booking.getId(),
-                                formatGuestName(booking.getGuestSurname(), booking.getGuestName()),
-                                booking.getRoomNumber(),
-                                booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
-                                booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
-                                formatStatus(booking.getStatus()),
-                                booking.getTotalPrice(),
-                                booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
-                        };
-                        bookingsTableModel.addRow(row);
-                    }
+            } catch (Exception e) {
+                System.err.println("Ошибка при обновлении таблицы бронирований: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
 
-                    System.out.println("Таблица бронирований обновлена. Записей: " + bookings.size());
+    // Новый метод для обновления таблицы заданным списком бронирований
+    private void updateBookingsTable(List<Booking> bookings) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                bookingsTableModel.setRowCount(0);
 
-                } catch (Exception e) {
-                    System.err.println("Ошибка при обновлении таблицы бронирований: " + e.getMessage());
-                    e.printStackTrace();
+                SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+                SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+
+                for (Booking booking : bookings) {
+                    Object[] row = {
+                            booking.getId(),
+                            formatGuestName(booking.getGuestSurname(), booking.getGuestName()),
+                            booking.getRoomNumber(),
+                            booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
+                            booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
+                            formatStatus(booking.getStatus()),
+                            booking.getTotalPrice(),
+                            booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
+                    };
+                    bookingsTableModel.addRow(row);
                 }
+
+                System.out.println("Таблица бронирований обновлена. Записей: " + bookings.size());
+
+                // Применяем текущую сортировку
+                applySorting();
+
+            } catch (Exception e) {
+                System.err.println("Ошибка при обновлении таблицы бронирований: " + e.getMessage());
+                e.printStackTrace();
             }
         });
     }
 
     public void refreshRoomsTable() {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    roomsTableModel.setRowCount(0);
-                    List<Room> rooms = roomDAO.getAllRooms();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                roomsTableModel.setRowCount(0);
+                List<Room> rooms = roomDAO.getAllRooms();
 
-                    for (Room room : rooms) {
-                        Object[] row = {
-                                room.getId(),
-                                room.getRoomNumber(),
-                                room.getRoomType(),
-                                room.getFloor(),
-                                formatStatus(room.getStatus()),
-                                String.format("%.2f руб.", room.getPrice()),
-                                room.getCapacity(),
-                                room.getDescription()
-                        };
-                        roomsTableModel.addRow(row);
-                    }
-
-                    System.out.println("Таблица номеров обновлена. Записей: " + rooms.size());
-
-                } catch (Exception e) {
-                    System.err.println("Ошибка при обновлении таблицы номеров: " + e.getMessage());
-                    e.printStackTrace();
+                for (Room room : rooms) {
+                    Object[] row = {
+                            room.getId(),
+                            room.getRoomNumber(),
+                            room.getRoomType(),
+                            room.getFloor(),
+                            formatStatus(room.getStatus()),
+                            String.format("%.2f руб.", room.getPrice()),
+                            room.getCapacity(),
+                            room.getDescription()
+                    };
+                    roomsTableModel.addRow(row);
                 }
+
+                System.out.println("Таблица номеров обновлена. Записей: " + rooms.size());
+
+            } catch (Exception e) {
+                System.err.println("Ошибка при обновлении таблицы номеров: " + e.getMessage());
+                e.printStackTrace();
             }
         });
     }
@@ -824,9 +1157,9 @@ public class MainWindow extends JFrame {
         for (Guest guest : guests) {
             Object[] row = {
                     guest.getGuestId(),
-                    guest.getMiddleName(),
-                    guest.getFirstName(),
                     guest.getLastName(),
+                    guest.getFirstName(),
+                    guest.getMiddleName(),
                     guest.getPhoneNumber(),
                     guest.getEmail(),
                     guest.getPassportSeries() + " " + guest.getPassportNumber()
@@ -835,45 +1168,14 @@ public class MainWindow extends JFrame {
         }
     }
 
-    // Метод для фильтрации бронирований по статусу
-    private void filterBookingsByStatus(String status) {
-        try {
-            bookingsTableModel.setRowCount(0);
-            List<Booking> allBookings = bookingDAO.getAllBookings();
-
-            SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
-            SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
-
-            for (Booking booking : allBookings) {
-                if (status.equals(booking.getStatus())) {
-                    Object[] row = {
-                            booking.getId(),
-                            (booking.getGuestSurname() != null ? booking.getGuestSurname() : "") + " " +
-                                    (booking.getGuestName() != null ? booking.getGuestName() : ""),
-                            booking.getRoomNumber() != null ? booking.getRoomNumber() : "",
-                            booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
-                            booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
-                            booking.getStatus(),
-                            booking.getTotalPrice(),
-                            booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
-                    };
-                    bookingsTableModel.addRow(row);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка при фильтрации бронирований: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     private void updateGuestsTable(List<Guest> guests) {
         guestsTableModel.setRowCount(0);
         for (Guest guest : guests) {
             Object[] row = {
                     guest.getGuestId(),
-                    guest.getMiddleName(),
-                    guest.getFirstName(),
                     guest.getLastName(),
+                    guest.getFirstName(),
+                    guest.getMiddleName(),
                     guest.getPhoneNumber(),
                     guest.getEmail(),
                     guest.getPassportSeries() + " " + guest.getPassportNumber()
@@ -898,11 +1200,7 @@ public class MainWindow extends JFrame {
             roomsTableModel.addRow(row);
         }
     }
-//    @Override
-//    public void dispose() {
-//        bookingManager.stopAutoCheck();
-//        super.dispose();
-//    }
+
     @Override
     public void dispose() {
         // Останавливаем синхронизатор при закрытии
@@ -911,6 +1209,7 @@ public class MainWindow extends JFrame {
         }
         super.dispose();
     }
+
     public static void main(String[] args) {
         try {
             UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());

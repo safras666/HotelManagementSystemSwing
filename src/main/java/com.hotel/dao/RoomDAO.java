@@ -72,18 +72,17 @@ public class RoomDAO {
     }
 
     // Метод для обновления только статуса комнаты
-    public boolean updateRoomStatus(int roomId, String newStatus) {
+    public boolean updateRoomStatus(int roomId, String status) {
         String sql = "UPDATE rooms SET status = ? WHERE id = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, newStatus);
+            pstmt.setString(1, status);
             pstmt.setInt(2, roomId);
 
             int rowsUpdated = pstmt.executeUpdate();
-            System.out.println("Статус комнаты ID " + roomId + " изменен на: " + newStatus +
-                    " (обновлено строк: " + rowsUpdated + ")");
+            System.out.println("Статус комнаты ID " + roomId + " изменен на: " + status);
 
             return rowsUpdated > 0;
 

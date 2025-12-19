@@ -4,9 +4,9 @@ import java.util.Date;
 
 public class Guest {
     private int guestId;
-    private String surname;
-    private String name;
-    private String patronymic;
+    private String surname;      // Фамилия
+    private String name;         // Имя
+    private String patronymic;   // Отчество
     private String passportSeries;
     private String passportNumber;
     private Date dateOfBirth;
@@ -20,8 +20,8 @@ public class Guest {
 
     // Конструктор с основными параметрами
     public Guest(String lastName, String firstName, String passportNumber) {
-        this.surname = lastName;
-        this.name = firstName;
+        this.surname = lastName;      // Фамилия
+        this.name = firstName;        // Имя
         this.passportNumber = passportNumber;
     }
 
@@ -29,9 +29,9 @@ public class Guest {
     public Guest(String lastName, String firstName, String middleName,
                  String passportSeries, String passportNumber, Date dateOfBirth,
                  String phoneNumber, String email, String address) {
-        this.surname = lastName;
-        this.name = firstName;
-        this.patronymic = middleName;
+        this.surname = lastName;      // Фамилия
+        this.name = firstName;        // Имя
+        this.patronymic = middleName; // Отчество
         this.passportSeries = passportSeries;
         this.passportNumber = passportNumber;
         this.dateOfBirth = dateOfBirth;
@@ -44,14 +44,24 @@ public class Guest {
     public int getGuestId() { return guestId; }
     public void setGuestId(int guestId) { this.guestId = guestId; }
 
-    public String getMiddleName() { return surname; }
-    public void setMiddleName(String middleName) { this.surname = middleName; }
+    // Фамилия
+    public String getSurname() { return surname; }
+    public void setSurname(String surname) { this.surname = surname; }
 
+    // Имя
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
-    public String getLastName() { return patronymic; }
-    public void setLastName(String lastName) { this.patronymic = lastName; }
+    // Отчество
+    public String getPatronymic() { return patronymic; }
+    public void setPatronymic(String patronymic) { this.patronymic = patronymic; }
+
+    // Для обратной совместимости (если где-то используются старые методы)
+    public String getMiddleName() { return patronymic; }
+    public void setMiddleName(String middleName) { this.patronymic = middleName; }
+
+    public String getLastName() { return surname; }
+    public void setLastName(String lastName) { this.surname = lastName; }
 
     public String getPassportSeries() { return passportSeries; }
     public void setPassportSeries(String passportSeries) { this.passportSeries = passportSeries; }

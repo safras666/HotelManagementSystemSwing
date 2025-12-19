@@ -285,7 +285,7 @@ public class RoomDialog extends JDialog {
             priceField.requestFocus();
             return;
         }
-        priceField.setText(String.valueOf((int) editingRoom.getPrice()));
+        //priceField.setText(String.valueOf((int) editingRoom.getPrice()));
         try {
             Room room = new Room();
             room.setRoomNumber(roomNumberField.getText().trim());

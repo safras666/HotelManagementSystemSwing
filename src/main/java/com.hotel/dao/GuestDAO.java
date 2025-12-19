@@ -139,9 +139,9 @@ public class GuestDAO {
     private Guest extractGuestFromResultSet(ResultSet rs) throws SQLException {
         Guest guest = new Guest();
         guest.setGuestId(rs.getInt("id"));
-        guest.setMiddleName(rs.getString("patronymic"));
-        guest.setName(rs.getString("name"));
-        guest.setLastName(rs.getString("surname"));
+        guest.setSurname(rs.getString("surname"));         // Фамилия
+        guest.setName(rs.getString("name"));               // Имя
+        guest.setPatronymic(rs.getString("patronymic"));   // Отчество
         guest.setPassportSeries(rs.getString("passport_series"));
         guest.setPassportNumber(rs.getString("passport_number"));
         guest.setPhoneNumber(rs.getString("phone"));

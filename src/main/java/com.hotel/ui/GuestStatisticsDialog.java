@@ -5,7 +5,6 @@ import com.hotel.dao.GuestDAO;
 import com.hotel.dao.RoomDAO;
 import com.hotel.entity.Booking;
 import com.hotel.entity.Guest;
-import com.hotel.entity.Room;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -93,7 +92,7 @@ public class GuestStatisticsDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
         panel.add(new JLabel("ФИО:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
-        JLabel lblFio = new JLabel(guest.getLastName() + " " + guest.getFirstName() + " " +
+        JLabel lblFio = new JLabel(guest.getLastName() + " " + guest.getName() + " " +
                 (guest.getMiddleName() != null ? guest.getMiddleName() : ""));
         lblFio.setFont(new Font("Arial", Font.BOLD, 14));
         panel.add(lblFio, gbc);

@@ -12,10 +12,14 @@ public class BookingDAO {
 
     public List<Booking> getBookingsByRoomId(int roomId) {
         List<Booking> bookings = new ArrayList<>();
-        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, r.room_number " +
+        String sql = "SELECT b.*, " +
+                "g.surname as guest_surname, g.name as guest_name, " +
+                "r.room_number, " +
+                "e.last_name as employee_last_name, e.first_name as employee_first_name " +
                 "FROM bookings b " +
                 "LEFT JOIN guests g ON b.guest_id = g.id " +
                 "LEFT JOIN rooms r ON b.room_id = r.id " +
+                "LEFT JOIN employees e ON b.employee_id = e.id " +
                 "WHERE b.room_id = ? " +
                 "ORDER BY b.check_in_date DESC";
 
@@ -26,11 +30,25 @@ public class BookingDAO {
             ResultSet rs = pstmt.executeQuery();
 
             while (rs.next()) {
-                Booking booking = extractBookingFromResultSet(rs);
+                Booking booking = new Booking();
+                // Заполнение полей бронирования
+                booking.setId(rs.getInt("id"));
+                booking.setGuestId(rs.getInt("guest_id"));
+                booking.setRoomId(rs.getInt("room_id"));
+                booking.setCheckInDate(rs.getDate("check_in_date"));
+                booking.setCheckOutDate(rs.getDate("check_out_date"));
+                booking.setStatus(rs.getString("status"));
+                booking.setTotalPrice(rs.getDouble("total_price"));
+                booking.setCreatedAt(rs.getTimestamp("created_at"));
+                booking.setGuestSurname(rs.getString("guest_surname"));
+                booking.setGuestName(rs.getString("guest_name"));
+                booking.setRoomNumber(rs.getString("room_number"));
+
                 bookings.add(booking);
             }
+
         } catch (SQLException e) {
-            System.err.println("Ошибка при получении истории бронирований: " + e.getMessage());
+            System.err.println("Ошибка при получении бронирований номера: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -39,35 +57,24 @@ public class BookingDAO {
 
     public List<Booking> getAllBookings() {
         List<Booking> bookings = new ArrayList<>();
-        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, r.room_number " +
+        String sql = "SELECT b.*, " +
+                "g.surname as guest_surname, g.name as guest_name, " +
+                "r.room_number, " +
+                "e.last_name as employee_last_name, e.first_name as employee_first_name " +
                 "FROM bookings b " +
                 "LEFT JOIN guests g ON b.guest_id = g.id " +
                 "LEFT JOIN rooms r ON b.room_id = r.id " +
-                "ORDER BY b.check_in_date DESC";
-
-        System.out.println("Выполняем запрос: " + sql);
+                "LEFT JOIN employees e ON b.employee_id = e.id " +
+                "ORDER BY b.created_at DESC";
 
         try (Connection conn = DatabaseConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
 
-            System.out.println("Запрос выполнен успешно");
-
-            int count = 0;
             while (rs.next()) {
                 Booking booking = extractBookingFromResultSet(rs);
                 bookings.add(booking);
-                count++;
-
-                System.out.println("Загружено бронирование #" + count + ":");
-                System.out.println("  ID: " + booking.getId());
-                System.out.println("  Гость: " + booking.getGuestSurname() + " " + booking.getGuestName());
-                System.out.println("  Номер: " + booking.getRoomNumber());
-                System.out.println("  Статус: " + booking.getStatus());
             }
-
-            System.out.println("Всего загружено бронирований: " + count);
-
         } catch (SQLException e) {
             System.err.println("Ошибка при получении всех бронирований: " + e.getMessage());
             e.printStackTrace();
@@ -76,18 +83,14 @@ public class BookingDAO {
         return bookings;
     }
 
+    // Добавьте метод addBooking с учетом employee_id:
     public void addBooking(Booking booking) {
         String sql = "INSERT INTO bookings (guest_id, room_id, check_in_date, check_out_date, " +
-                "status, total_price) VALUES (?, ?, ?, ?, ?, ?)";
+                "status, total_price, employee_id, created_at) " + // Добавлен employee_id
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-            System.out.println("Добавление бронирования в БД:");
-            System.out.println("Гость ID: " + booking.getGuestId());
-            System.out.println("Номер ID: " + booking.getRoomId());
-            System.out.println("Статус: " + booking.getStatus());
-            System.out.println("Стоимость: " + booking.getTotalPrice());
 
             pstmt.setInt(1, booking.getGuestId());
             pstmt.setInt(2, booking.getRoomId());
@@ -95,14 +98,14 @@ public class BookingDAO {
             pstmt.setDate(4, new java.sql.Date(booking.getCheckOutDate().getTime()));
             pstmt.setString(5, booking.getStatus());
             pstmt.setDouble(6, booking.getTotalPrice());
+            pstmt.setInt(7, booking.getEmployeeId()); // Новый параметр
+            pstmt.setTimestamp(8, new java.sql.Timestamp(new Date().getTime()));
 
-            int rowsAffected = pstmt.executeUpdate();
-            System.out.println("Строк добавлено: " + rowsAffected);
+            pstmt.executeUpdate();
 
             try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
                     booking.setId(generatedKeys.getInt(1));
-                    System.out.println("ID нового бронирования: " + booking.getId());
                 }
             }
 
@@ -182,12 +185,16 @@ public class BookingDAO {
 
     // Метод для получения бронирования по ID с полными данными
     public Booking getBookingByIdWithDetails(int id) {
-        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, " +
-                "r.room_number, r.status as room_status " +
+        String sql = "SELECT b.*, " +
+                "g.last_name as guest_surname, g.name as guest_name, " +
+                "r.room_number, " +
+                "e.last_name as employee_last_name, e.first_name as employee_first_name " +
                 "FROM bookings b " +
                 "LEFT JOIN guests g ON b.guest_id = g.id " +
                 "LEFT JOIN rooms r ON b.room_id = r.id " +
+                "LEFT JOIN employees e ON b.employee_id = e.id " +
                 "WHERE b.id = ?";
+
         Booking booking = null;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -198,8 +205,6 @@ public class BookingDAO {
 
             if (rs.next()) {
                 booking = extractBookingFromResultSet(rs);
-                // Добавляем статус комнаты
-                booking.setRoomNumber(rs.getString("room_number"));
             }
 
         } catch (SQLException e) {
@@ -210,15 +215,20 @@ public class BookingDAO {
         return booking;
     }
 
+
     // Метод для получения всех бронирований с деталями
+    // В методе getAllBookingsWithDetails() измените SQL запрос:
     public List<Booking> getAllBookingsWithDetails() {
         List<Booking> bookings = new ArrayList<>();
-        String sql = "SELECT b.*, g.surname as guest_surname, g.name as guest_name, " +
-                "r.room_number, r.status as room_status " +
+        String sql = "SELECT b.*, " +
+                "g.surname as guest_surname, g.name as guest_name, " +
+                "r.room_number, " +
+                "e.last_name as employee_last_name, e.first_name as employee_first_name " +
                 "FROM bookings b " +
                 "LEFT JOIN guests g ON b.guest_id = g.id " +
                 "LEFT JOIN rooms r ON b.room_id = r.id " +
-                "ORDER BY b.check_in_date DESC";
+                "LEFT JOIN employees e ON b.employee_id = e.id " +
+                "ORDER BY b.created_at DESC";
 
         try (Connection conn = DatabaseConnection.getConnection();
              Statement stmt = conn.createStatement();
@@ -226,12 +236,10 @@ public class BookingDAO {
 
             while (rs.next()) {
                 Booking booking = extractBookingFromResultSet(rs);
-                booking.setRoomNumber(rs.getString("room_number"));
                 bookings.add(booking);
             }
-
         } catch (SQLException e) {
-            System.err.println("Ошибка при получении всех бронирований: " + e.getMessage());
+            System.err.println("Ошибка при получении списка бронирований: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -376,6 +384,7 @@ public class BookingDAO {
     }
 
     // Вспомогательные методы
+    // Обновите метод extractBookingFromResultSet:
     private Booking extractBookingFromResultSet(ResultSet rs) throws SQLException {
         Booking booking = new Booking();
         booking.setId(rs.getInt("id"));
@@ -385,33 +394,36 @@ public class BookingDAO {
         booking.setCheckOutDate(rs.getDate("check_out_date"));
         booking.setStatus(rs.getString("status"));
         booking.setTotalPrice(rs.getDouble("total_price"));
+        booking.setCreatedAt(rs.getTimestamp("created_at"));
 
-        // Проверяем, есть ли поле created_at в таблице
+        // Поля гостя
+        booking.setGuestSurname(rs.getString("guest_surname"));
+        booking.setGuestName(rs.getString("guest_name"));
+
+        // Поля номера
+        booking.setRoomNumber(rs.getString("room_number"));
+
+        // Поля сотрудника
+        booking.setEmployeeId(rs.getInt("employee_id"));
+
+        // Проверяем, есть ли поля сотрудника в ResultSet
         try {
-            booking.setCreatedAt(rs.getTimestamp("created_at"));
+            booking.setEmployeeLastName(rs.getString("employee_last_name"));
         } catch (SQLException e) {
-            // Если поля нет, игнорируем ошибку
-            System.out.println("Поле created_at не найдено в таблице bookings");
+            // Если поля нет, устанавливаем null
+            booking.setEmployeeLastName(null);
         }
 
-        // Проверяем, есть ли поля из JOIN
         try {
-            booking.setGuestSurname(rs.getString("guest_surname"));
-            booking.setGuestName(rs.getString("guest_name"));
-            booking.setRoomNumber(rs.getString("room_number"));
-
-            System.out.println("Извлечение данных: гостя=" + booking.getGuestSurname() +
-                    ", номера=" + booking.getRoomNumber());
+            booking.setEmployeeFirstName(rs.getString("employee_first_name"));
         } catch (SQLException e) {
-            System.err.println("Ошибка при извлечении полей из JOIN: " + e.getMessage());
-            // Устанавливаем значения по умолчанию
-            booking.setGuestSurname("Неизвестно");
-            booking.setGuestName("");
-            booking.setRoomNumber("?");
+            // Если поля нет, устанавливаем null
+            booking.setEmployeeFirstName(null);
         }
 
         return booking;
     }
+
 
     // В BookingDAO.java добавьте эти методы:
 

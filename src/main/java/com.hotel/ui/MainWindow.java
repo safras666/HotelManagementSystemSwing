@@ -9,10 +9,13 @@ import com.hotel.entity.Room;
 import com.hotel.util.BookingManager;
 import com.hotel.entity.BookingStatusManager;
 import com.hotel.util.StatusSynchronizer;
-import com.hotel.ui.GuestStatisticsDialog;
-import com.hotel.ui.RoomStatisticsDialog;
+import com.hotel.dao.EmployeeDAO;
+import com.hotel.entity.Employee;
+import com.hotel.dao.PositionDAO;
+import com.hotel.dao.RoomCleaningDAO;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
@@ -32,6 +35,9 @@ public class MainWindow extends JFrame {
     private GuestDAO guestDAO;
     private RoomDAO roomDAO;
     private BookingDAO bookingDAO;
+    private EmployeeDAO employeeDAO;
+    private PositionDAO positionDAO;
+    private RoomCleaningDAO roomCleaningDAO;
     private BookingStatusManager bookingStatusManager;
     private DefaultTableModel guestsTableModel;
     private DefaultTableModel roomsTableModel;
@@ -49,6 +55,9 @@ public class MainWindow extends JFrame {
     private JComboBox<String> sortCombo;
     private JCheckBox showActiveOnlyCheckbox;
     private JComboBox<String> roomStatusFilterCombo;
+    private DefaultTableModel employeesTableModel;
+    private JTable employeesTable;
+    private JTextField employeeSearchField;
 
 
     public MainWindow() {
@@ -57,6 +66,9 @@ public class MainWindow extends JFrame {
         this.roomDAO = new RoomDAO();
         this.bookingDAO = new BookingDAO();
         this.bookingStatusManager = new BookingStatusManager(bookingDAO, roomDAO);
+        this.employeeDAO = new EmployeeDAO();
+        this.positionDAO = new PositionDAO();
+        this.roomCleaningDAO = new RoomCleaningDAO();
 
         // Инициализация менеджера бронирований
         this.bookingManager = new BookingManager(bookingDAO, roomDAO);
@@ -106,7 +118,13 @@ public class MainWindow extends JFrame {
         JMenuItem bookingItem = new JMenuItem("Новое бронирование");
 
         bookingItem.addActionListener(e -> {
-            BookingDialog dialog = new BookingDialog(this, bookingDAO, guestDAO, roomDAO);
+            BookingDialog dialog = new BookingDialog(
+                    MainWindow.this,
+                    bookingDAO,
+                    guestDAO,
+                    roomDAO,
+                    employeeDAO // Передаем DAO сотрудников
+            );
             dialog.setVisible(true);
             refreshBookingsTable();
         });
@@ -147,6 +165,10 @@ public class MainWindow extends JFrame {
         JPanel bookingPanel = createBookingsPanel();
         tabbedPane.addTab("Бронирования", bookingPanel);
 
+        // Вкладка "Сотрудники"
+        JPanel employeesPanel = createEmployeesPanel();
+        tabbedPane.addTab("Сотрудники", employeesPanel);
+
         add(tabbedPane, BorderLayout.CENTER);
     }
 
@@ -165,19 +187,222 @@ public class MainWindow extends JFrame {
         JPanel occupiedCard = createStatCard("Занято", "●", Color.RED);
         JPanel freeCard = createStatCard("Свободно", "○", new Color(34, 139, 34));
 
+        // Новые карточки для сотрудников
+        JPanel employeeCard = createStatCard("Сотрудники", "👨‍💼", new Color(70, 130, 180));
+        employeeCard.getComponent(1).setName("value_сотрудники"); // JLabel с значением
+
+        JPanel salaryCard = createStatCard("Зарплаты", "💰", new Color(255, 140, 0));
+        salaryCard.getComponent(1).setName("value_зарплата");
+
+        JPanel activeEmployeeCard = createStatCard("Работают", "✓", new Color(50, 205, 50));
+        activeEmployeeCard.getComponent(1).setName("value_активные_сотрудники");
+
         statsPanel.add(guestCard);
         statsPanel.add(roomCard);
         statsPanel.add(bookingCard);
         statsPanel.add(revenueCard);
         statsPanel.add(occupiedCard);
         statsPanel.add(freeCard);
+        statsPanel.add(employeeCard);
+        statsPanel.add(salaryCard);
+        statsPanel.add(activeEmployeeCard);
 
         panel.add(statsPanel, BorderLayout.CENTER);
 
         // Обновление статистики
-        refreshDashboardStats(guestCard, roomCard, bookingCard, revenueCard, occupiedCard, freeCard);
+        refreshDashboardStats(guestCard, roomCard, bookingCard, revenueCard,
+                occupiedCard, freeCard, employeeCard, salaryCard, activeEmployeeCard);
 
         return panel;
+    }
+
+    private JPanel createEmployeesPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        // Верхняя панель с кнопками
+        JPanel topPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Кнопки действий
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
+        JButton addButton = new JButton("Добавить сотрудника");
+        topPanel.add(addButton, gbc);
+
+        gbc.gridx = 1;
+        JButton editButton = new JButton("Редактировать");
+        topPanel.add(editButton, gbc);
+
+        gbc.gridx = 2;
+        JButton deleteButton = new JButton("Удалить");
+        topPanel.add(deleteButton, gbc);
+
+        gbc.gridx = 3;
+        JButton refreshButton = new JButton("Обновить");
+        topPanel.add(refreshButton, gbc);
+
+        // Поиск
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 4; gbc.weightx = 1.0;
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        searchPanel.add(new JLabel("Поиск:"));
+        employeeSearchField = new JTextField(20); // Используем поле класса
+        searchPanel.add(employeeSearchField);
+        JButton searchButton = new JButton("Найти");
+        searchPanel.add(searchButton);
+        topPanel.add(searchPanel, gbc);
+
+        // Модель таблицы сотрудников - используем поле класса
+        String[] columns = {"ID", "Фамилия", "Имя", "Отчество", "Должность", "Телефон", "Зарплата", "Статус", "Дата приема"};
+        employeesTableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 6) return Double.class; // Зарплата
+                return String.class;
+            }
+        };
+
+        // Таблица сотрудников - используем поле класса
+        employeesTable = new JTable(employeesTableModel);
+        employeesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        employeesTable.getTableHeader().setReorderingAllowed(false);
+
+        // Настройка ширины колонок
+        employeesTable.getColumnModel().getColumn(0).setPreferredWidth(50);
+        employeesTable.getColumnModel().getColumn(1).setPreferredWidth(100);
+        employeesTable.getColumnModel().getColumn(2).setPreferredWidth(100);
+        employeesTable.getColumnModel().getColumn(3).setPreferredWidth(100);
+        employeesTable.getColumnModel().getColumn(4).setPreferredWidth(120);
+        employeesTable.getColumnModel().getColumn(5).setPreferredWidth(100);
+        employeesTable.getColumnModel().getColumn(6).setPreferredWidth(80);
+        employeesTable.getColumnModel().getColumn(7).setPreferredWidth(80);
+        employeesTable.getColumnModel().getColumn(8).setPreferredWidth(100);
+
+        JScrollPane scrollPane = new JScrollPane(employeesTable);
+
+        // Заполнение таблицы
+        refreshEmployeesTable();
+
+        // Добавьте кастомный рендерер для колонки зарплаты
+        employeesTable.setDefaultRenderer(Double.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                                                           boolean isSelected, boolean hasFocus, int row, int column) {
+                if (value instanceof Double) {
+                    value = String.format("%.2f руб.", (Double) value);
+                }
+                return super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            }
+        });
+
+        // Обработчики кнопок
+        addButton.addActionListener(e -> {
+            EmployeeDialog dialog = new EmployeeDialog(MainWindow.this, employeeDAO, positionDAO);
+            dialog.setVisible(true);
+            refreshEmployeesTable();
+        });
+
+        editButton.addActionListener(e -> {
+            int selectedRow = employeesTable.getSelectedRow();
+            if (selectedRow >= 0) {
+                int employeeId = (int) employeesTableModel.getValueAt(selectedRow, 0);
+                Employee employee = employeeDAO.getEmployeeById(employeeId);
+                if (employee != null) {
+                    EmployeeDialog dialog = new EmployeeDialog(MainWindow.this, employeeDAO, positionDAO, employee);
+                    dialog.setVisible(true);
+                    refreshEmployeesTable();
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Выберите сотрудника для редактирования",
+                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        deleteButton.addActionListener(e -> {
+            int selectedRow = employeesTable.getSelectedRow();
+            if (selectedRow >= 0) {
+                int confirm = JOptionPane.showConfirmDialog(this,
+                        "Вы уверены, что хотите удалить выбранного сотрудника?",
+                        "Подтверждение удаления",
+                        JOptionPane.YES_NO_OPTION);
+
+                if (confirm == JOptionPane.YES_OPTION) {
+                    int employeeId = (int) employeesTableModel.getValueAt(selectedRow, 0);
+                    employeeDAO.deleteEmployee(employeeId);
+                    refreshEmployeesTable();
+                    JOptionPane.showMessageDialog(this, "Сотрудник успешно удален",
+                            "Успех", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Выберите сотрудника для удаления",
+                        "Ошибка", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        refreshButton.addActionListener(e -> refreshEmployeesTable());
+
+        searchButton.addActionListener(e -> {
+            String searchTerm = employeeSearchField.getText().trim();
+            if (!searchTerm.isEmpty()) {
+                List<Employee> searchResults = employeeDAO.searchEmployees(searchTerm);
+                updateEmployeesTable(searchResults); // Без параметра model
+            } else {
+                refreshEmployeesTable(); // Без параметра
+            }
+        });
+
+        panel.add(topPanel, BorderLayout.NORTH);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    // Метод обновления таблицы сотрудников (без параметра)
+    private void refreshEmployeesTable() {
+        List<Employee> employees = employeeDAO.getAllEmployees();
+        updateEmployeesTable(employees);
+    }
+
+    // НА этот метод:
+    private void updateEmployeesTable(List<Employee> employees) {
+        employeesTableModel.setRowCount(0);
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+
+        for (Employee employee : employees) {
+            Object[] row = {
+                    employee.getId(),
+                    employee.getLastName(),
+                    employee.getFirstName(),
+                    employee.getMiddleName() != null ? employee.getMiddleName() : "",
+                    employee.getPositionName(),
+                    employee.getPhone(),
+                    employee.getSalary(),
+                    formatEmployeeStatus(employee.getStatus()),
+                    dateFormat.format(employee.getHireDate())
+            };
+            employeesTableModel.addRow(row);
+        }
+    }
+
+    // Метод форматирования статуса сотрудника
+    private String formatEmployeeStatus(String status) {
+        if (status == null) return "";
+
+        switch (status) {
+            case "Работает":
+                return "<html><font color='green'>" + status + "</font></html>";
+            case "Уволен":
+                return "<html><font color='red'>" + status + "</font></html>";
+            case "Отпуск":
+                return "<html><font color='orange'>" + status + "</font></html>";
+            default:
+                return status;
+        }
     }
 
     private JPanel createStatCard(String title, String icon, Color color) {
@@ -209,6 +434,11 @@ public class MainWindow extends JFrame {
         int roomCount = roomDAO.getAllRooms().size();
         int bookingCount = bookingDAO.getAllBookings().size();
 
+        // Добавьте эти переменные
+        int employeeCount = employeeDAO.getAllEmployees().size();
+        double totalSalary = employeeDAO.getTotalSalaryExpenses();
+        int activeEmployees = employeeDAO.getEmployeesByStatus("Работает").size();
+
         List<Room> rooms = roomDAO.getAllRooms();
         int occupiedCount = 0;
         int freeCount = 0;
@@ -219,6 +449,31 @@ public class MainWindow extends JFrame {
                 occupiedCount++;
             } else {
                 freeCount++;
+            }
+        }
+
+        // Обновление карточек (добавьте в цикл):
+        for (JPanel card : cards) {
+            Component[] components = card.getComponents();
+            for (Component comp : components) {
+                if (comp instanceof JLabel) {
+                    JLabel label = (JLabel) comp;
+                    String name = label.getName();
+                    if (name != null) {
+                        switch (name) {
+                            // ... существующие кейсы ...
+                            case "value_сотрудники": // Создайте такую карточку
+                                label.setText(String.valueOf(employeeCount));
+                                break;
+                            case "value_зарплата": // Создайте такую карточку
+                                label.setText(String.format("%.2f руб.", totalSalary));
+                                break;
+                            case "value_активные_сотрудники": // Создайте такую карточку
+                                label.setText(String.valueOf(activeEmployees));
+                                break;
+                        }
+                    }
+                }
             }
         }
 
@@ -544,7 +799,14 @@ public class MainWindow extends JFrame {
                 int roomId = (int) roomsTableModel.getValueAt(selectedRow, 0);
                 Room room = roomDAO.getRoomById(roomId);
                 if (room != null) {
-                    RoomHistoryDialog dialog = new RoomHistoryDialog(MainWindow.this, room, bookingDAO);
+                    RoomHistoryDialog dialog = new RoomHistoryDialog(
+                            MainWindow.this,
+                            room,
+                            bookingDAO,
+                            roomCleaningDAO,
+                            employeeDAO,
+                            positionDAO
+                    );
                     dialog.setVisible(true);
                 }
             } else {
@@ -555,6 +817,7 @@ public class MainWindow extends JFrame {
 
         // В методе createRoomsPanel() найдите существующий обработчик и замените его:
 
+        // В методе createRoomsPanel() обновите обработчик двойного щелчка:
         roomsTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -564,15 +827,48 @@ public class MainWindow extends JFrame {
                         int roomId = (int) roomsTableModel.getValueAt(selectedRow, 0);
                         Room room = roomDAO.getRoomById(roomId);
                         if (room != null) {
+                            // Открываем новую статистику номера
                             RoomStatisticsDialog dialog = new RoomStatisticsDialog(
                                     MainWindow.this,
                                     room,
                                     roomDAO,
-                                    bookingDAO
+                                    bookingDAO,
+                                    roomCleaningDAO,
+                                    employeeDAO,
+                                    positionDAO
                             );
                             dialog.setVisible(true);
                         }
                     }
+                }
+            }
+        });
+
+        // В обработчике кнопки "Редактировать" тоже передайте employeeDAO:
+        editButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedRow = bookingsTable.getSelectedRow();
+                if (selectedRow >= 0) {
+                    int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+                    int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
+                    Booking booking = bookingDAO.getBookingById(bookingId);
+                    if (booking != null) {
+                        BookingDialog dialog = new BookingDialog(
+                                MainWindow.this,
+                                bookingDAO,
+                                guestDAO,
+                                roomDAO,
+                                employeeDAO, // Передаем DAO сотрудников
+                                booking
+                        );
+                        dialog.setVisible(true);
+                        refreshBookingsTable();
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(MainWindow.this,
+                            "Выберите бронирование для редактирования",
+                            "Ошибка", JOptionPane.WARNING_MESSAGE);
                 }
             }
         });
@@ -688,7 +984,7 @@ public class MainWindow extends JFrame {
         panel.add(topPanel, BorderLayout.NORTH);
 
         // Модель таблицы бронирований с правильными типами данных
-        String[] columns = {"ID", "Гость", "Номер", "Заезд", "Выезд", "Статус", "Стоимость", "Создано"};
+        String[] columns = {"ID", "Гость", "Номер", "Заезд", "Выезд", "Статус", "Стоимость", "Сотрудник", "Создано"};
         bookingsTableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -700,8 +996,8 @@ public class MainWindow extends JFrame {
                 switch (columnIndex) {
                     case 0:  // ID
                         return Integer.class;
-                    case 6:  // Стоимость
-                        return Double.class;
+                    case 6:  // Стоимость - оставляем Number.class или Double.class
+                        return Number.class;
                     default: // Все остальные колонки
                         return String.class;
                 }
@@ -750,6 +1046,22 @@ public class MainWindow extends JFrame {
             }
         });
 
+        // Кастомный рендерер для колонки стоимости
+        bookingsTable.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                                                           boolean isSelected, boolean hasFocus, int row, int column) {
+                // Форматируем стоимость как целое число с "руб."
+                if (value instanceof Number) {
+                    Number number = (Number) value;
+                    value = String.format("%d руб.", number.intValue());
+                } else if (value == null) {
+                    value = "0 руб.";
+                }
+                return super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            }
+        });
+
         bookingsTableSorter.setComparator(7, new Comparator<String>() {
             private SimpleDateFormat datetimeFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
 
@@ -783,29 +1095,48 @@ public class MainWindow extends JFrame {
         // Заполняем таблицу данными
         refreshBookingsTable();
 
-        // Обработчики кнопок действий
-        addButton.addActionListener(e -> {
-            BookingDialog dialog = new BookingDialog(this, bookingDAO, guestDAO, roomDAO);
-            dialog.setVisible(true);
-            refreshAllTables();
+        // В обработчике кнопки "Новое бронирование" передайте employeeDAO:
+        addButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // ОТКРЫТЬ ДИАЛОГ БРОНИРОВАНИЯ
+                BookingDialog dialog = new BookingDialog(
+                        MainWindow.this,
+                        bookingDAO,
+                        guestDAO,
+                        roomDAO,
+                        employeeDAO // Передаем DAO сотрудников
+                );
+                dialog.setVisible(true);
+                refreshBookingsTable();
+            }
         });
 
-        refreshButton.addActionListener(e -> refreshAllTables());
-
-        editButton.addActionListener(e -> {
-            int selectedRow = bookingsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
-                int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
-                Booking booking = bookingDAO.getBookingById(bookingId);
-                if (booking != null) {
-                    BookingDialog dialog = new BookingDialog(this, bookingDAO,
-                            guestDAO, roomDAO, booking);
-                    dialog.setVisible(true);
-                    refreshAllTables();
+        editButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedRow = bookingsTable.getSelectedRow();
+                if (selectedRow >= 0) {
+                    int modelRow = bookingsTable.convertRowIndexToModel(selectedRow);
+                    int bookingId = (int) bookingsTableModel.getValueAt(modelRow, 0);
+                    Booking booking = bookingDAO.getBookingById(bookingId);
+                    if (booking != null) {
+                        BookingDialog dialog = new BookingDialog(
+                                MainWindow.this,
+                                bookingDAO,
+                                guestDAO,
+                                roomDAO,
+                                employeeDAO,
+                                booking
+                        );
+                        dialog.setVisible(true);
+                        refreshBookingsTable();
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(MainWindow.this,
+                            "Выберите бронирование для редактирования",
+                            "Ошибка", JOptionPane.WARNING_MESSAGE);
                 }
-            } else {
-                showWarning("Выберите бронирование для редактирования");
             }
         });
 
@@ -987,6 +1318,8 @@ public class MainWindow extends JFrame {
         }
     }
 
+
+
     // Обработчик выселения
     private void handleCheckOut() {
         int selectedRow = bookingsTable.getSelectedRow();
@@ -1022,6 +1355,7 @@ public class MainWindow extends JFrame {
         refreshBookingsTable();
         refreshRoomsTable();
         refreshGuestsTable();
+        refreshEmployeesTable();
     }
 
     public void refreshBookingsTable() {
@@ -1060,7 +1394,8 @@ public class MainWindow extends JFrame {
                             booking.getCheckInDate() != null ? dateFormat.format(booking.getCheckInDate()) : "",
                             booking.getCheckOutDate() != null ? dateFormat.format(booking.getCheckOutDate()) : "",
                             formatStatus(booking.getStatus()),
-                            booking.getTotalPrice(),
+                            booking.getTotalPrice(), // Передаем Double без форматирования
+                            formatEmployeeName(booking.getEmployeeLastName(), booking.getEmployeeFirstName()),
                             booking.getCreatedAt() != null ? datetimeFormat.format(booking.getCreatedAt()) : ""
                     };
                     bookingsTableModel.addRow(row);
@@ -1076,6 +1411,14 @@ public class MainWindow extends JFrame {
                 e.printStackTrace();
             }
         });
+    }
+
+    // Добавьте метод для форматирования имени сотрудника:
+    private String formatEmployeeName(String lastName, String firstName) {
+        if (lastName == null && firstName == null) return "Не указан";
+        if (lastName == null) return firstName;
+        if (firstName == null) return lastName;
+        return lastName + " " + firstName;
     }
 
     public void refreshRoomsTable() {
@@ -1158,7 +1501,7 @@ public class MainWindow extends JFrame {
             Object[] row = {
                     guest.getGuestId(),
                     guest.getLastName(),
-                    guest.getFirstName(),
+                    guest.getName(),
                     guest.getMiddleName(),
                     guest.getPhoneNumber(),
                     guest.getEmail(),
@@ -1174,7 +1517,7 @@ public class MainWindow extends JFrame {
             Object[] row = {
                     guest.getGuestId(),
                     guest.getLastName(),
-                    guest.getFirstName(),
+                    guest.getName(),
                     guest.getMiddleName(),
                     guest.getPhoneNumber(),
                     guest.getEmail(),

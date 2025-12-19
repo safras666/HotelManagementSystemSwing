@@ -3,513 +3,377 @@ package com.hotel.ui;
 import com.hotel.dao.BookingDAO;
 import com.hotel.dao.GuestDAO;
 import com.hotel.dao.RoomDAO;
+import com.hotel.dao.EmployeeDAO; // Импортируем DAO сотрудников
 import com.hotel.entity.Booking;
 import com.hotel.entity.Guest;
 import com.hotel.entity.Room;
+import com.hotel.entity.Employee; // Импортируем Employee
+import com.toedter.calendar.JDateChooser;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 
 public class BookingDialog extends JDialog {
-    private JComboBox<Guest> guestCombo;
-    private JComboBox<Room> roomCombo;
-    private JTextField checkInField;
-    private JTextField checkOutField;
-    private JComboBox<String> statusCombo;
-    private JTextField totalPriceField;
-
-    private JButton saveButton;
-    private JButton cancelButton;
-    private JButton calculateButton;
-
     private BookingDAO bookingDAO;
     private GuestDAO guestDAO;
     private RoomDAO roomDAO;
-    private boolean isEditMode = false;
-    private Booking editingBooking;
-    private MainWindow mainWindow;
+    private EmployeeDAO employeeDAO; // Добавляем DAO сотрудников
+    private Booking booking;
+    private boolean isEditMode;
 
-    private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+    private JComboBox<Guest> cbGuest;
+    private JComboBox<Room> cbRoom;
+    private JComboBox<Employee> cbEmployee; // Новый ComboBox для сотрудников
+    private JDateChooser dcCheckIn;
+    private JDateChooser dcCheckOut;
+    private JTextField txtTotalPrice;
+    private JComboBox<String> cbStatus;
 
-    public BookingDialog(MainWindow parent, BookingDAO bookingDAO,
-                         GuestDAO guestDAO, RoomDAO roomDAO) {
-        super(parent, "Новое бронирование", true);
-        this.mainWindow = parent;
-        this.bookingDAO = bookingDAO;
-        this.guestDAO = guestDAO;
-        this.roomDAO = roomDAO;
-        initComponents();
-        loadGuests();
-        loadAllRooms();
-        pack();
-        setLocationRelativeTo(parent);
-        setSize(500, 450);
+    public BookingDialog(JFrame parent, BookingDAO bookingDAO,
+                         GuestDAO guestDAO, RoomDAO roomDAO,
+                         EmployeeDAO employeeDAO) { // Обновленный конструктор
+        this(parent, bookingDAO, guestDAO, roomDAO, employeeDAO, null);
     }
 
-    public BookingDialog(MainWindow parent, BookingDAO bookingDAO,
-                         GuestDAO guestDAO, RoomDAO roomDAO, Booking booking) {
-        super(parent, "Редактирование бронирования", true);
-        this.mainWindow = parent;
+    public BookingDialog(JFrame parent, BookingDAO bookingDAO,
+                         GuestDAO guestDAO, RoomDAO roomDAO,
+                         EmployeeDAO employeeDAO, Booking booking) { // Обновленный конструктор
+        super(parent, true);
         this.bookingDAO = bookingDAO;
         this.guestDAO = guestDAO;
         this.roomDAO = roomDAO;
-        this.editingBooking = booking;
-        this.isEditMode = true;
+        this.employeeDAO = employeeDAO; // Инициализируем
+        this.booking = booking;
+        this.isEditMode = booking != null;
+
         initComponents();
-        loadGuests();
-        loadAllRooms();
-        fillBookingData();
-        pack();
+        setTitle(isEditMode ? "Редактирование бронирования" : "Новое бронирование");
+        setSize(550, 500); // Увеличили размер для нового поля
         setLocationRelativeTo(parent);
-        setSize(500, 450);
     }
 
     private void initComponents() {
-        setLayout(new BorderLayout(10, 10));
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JPanel fieldsPanel = new JPanel(new GridBagLayout());
+        // Форма
+        JPanel formPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(8, 10, 8, 10);
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(5, 5, 5, 5);
 
         int row = 0;
 
         // Гость
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Гость*:"), gbc);
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Гость*:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0;
 
-        gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        guestCombo = new JComboBox<>();
-        guestCombo.setPreferredSize(new Dimension(250, 30));
-        fieldsPanel.add(guestCombo, gbc);
+        List<Guest> guests = guestDAO.getAllGuests();
+        cbGuest = new JComboBox<>(guests.toArray(new Guest[0]));
+        cbGuest.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value,
+                                                          int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Guest) {
+                    Guest guest = (Guest) value;
+                    setText(guest.getLastName() + " " + guest.getName() +
+                            " (" + guest.getPassportNumber() + ")");
+                }
+                return this;
+            }
+        });
+        formPanel.add(cbGuest, gbc);
         row++;
 
         // Номер
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Номер*:"), gbc);
-
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Номер*:"), gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        roomCombo = new JComboBox<>();
-        roomCombo.setPreferredSize(new Dimension(250, 30));
-        fieldsPanel.add(roomCombo, gbc);
+
+        List<Room> availableRooms = roomDAO.getAvailableRooms();
+        cbRoom = new JComboBox<>(availableRooms.toArray(new Room[0]));
+        cbRoom.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value,
+                                                          int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Room) {
+                    Room room = (Room) value;
+                    setText(room.getRoomNumber() + " - " + room.getRoomType() +
+                            " (" + room.getPrice() + " руб./сут)");
+                }
+                return this;
+            }
+        });
+        formPanel.add(cbRoom, gbc);
+        row++;
+
+        // СОТРУДНИК (НОВОЕ ПОЛЕ) - ТОЛЬКО АДМИНИСТРАТОРЫ
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Сотрудник* (администратор):"), gbc); // Измененная подпись
+        gbc.gridx = 1;
+
+        // Получаем активных сотрудников
+        List<Employee> employees = employeeDAO.getEmployeesByStatus("Работает");
+        List<Employee> administrators = employeeDAO.getEmployeesByPosition("Administrator");
+        // Если нет администраторов, показываем сообщение
+        if (administrators.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "В системе нет сотрудников с должностью 'Administrator'.\n" +
+                            "Добавьте администратора через меню сотрудников.",
+                    "Внимание", JOptionPane.WARNING_MESSAGE);
+        }
+
+        cbEmployee = new JComboBox<>(administrators.toArray(new Employee[0]));
+        cbEmployee.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value,
+                                                          int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Employee) {
+                    Employee emp = (Employee) value;
+                    setText(emp.getLastName() + " " + emp.getFirstName() +
+                            " (" + emp.getPositionName() + ")");
+                }
+                return this;
+            }
+        });
+        formPanel.add(cbEmployee, gbc);
         row++;
 
         // Дата заезда
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Дата заезда* (ДД.ММ.ГГГГ):"), gbc);
-
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Дата заезда*:"), gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        checkInField = new JTextField(10);
-        checkInField.setText(dateFormat.format(new Date()));
-        checkInField.setPreferredSize(new Dimension(150, 30));
-        fieldsPanel.add(checkInField, gbc);
+        dcCheckIn = new JDateChooser();
+        dcCheckIn.setDate(new Date());
+        formPanel.add(dcCheckIn, gbc);
         row++;
 
         // Дата выезда
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Дата выезда* (ДД.ММ.ГГГГ):"), gbc);
-
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Дата выезда*:"), gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        checkOutField = new JTextField(10);
-        // Завтрашняя дата
-        Date tomorrow = new Date(System.currentTimeMillis() + 86400000L);
-        checkOutField.setText(dateFormat.format(tomorrow));
-        checkOutField.setPreferredSize(new Dimension(150, 30));
-        fieldsPanel.add(checkOutField, gbc);
-
-        // Кнопка расчета
-        gbc.gridx = 2;
-        gbc.weightx = 0.0;
-        calculateButton = new JButton("Рассчитать");
-        calculateButton.setPreferredSize(new Dimension(100, 30));
-        fieldsPanel.add(calculateButton, gbc);
-        row++;
-
-        // Статус
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Статус*:"), gbc);
-
-        gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        String[] statuses = {"Забронирован", "Заселен", "Выселен", "Отменен"};
-        statusCombo = new JComboBox<>(statuses);
-        statusCombo.setPreferredSize(new Dimension(150, 30));
-        fieldsPanel.add(statusCombo, gbc);
+        dcCheckOut = new JDateChooser();
+        dcCheckOut.setDate(new Date(System.currentTimeMillis() + 86400000)); // Завтра
+        formPanel.add(dcCheckOut, gbc);
         row++;
 
         // Стоимость
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0.3;
-        fieldsPanel.add(new JLabel("Стоимость (руб.):"), gbc);
-
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Общая стоимость:"), gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0.7;
-        totalPriceField = new JTextField("0");
-        totalPriceField.setPreferredSize(new Dimension(150, 30));
-        fieldsPanel.add(totalPriceField, gbc);
+        txtTotalPrice = new JTextField(10);
+        // Автоматический расчет стоимости при выборе номера
+        cbRoom.addActionListener(e -> calculateTotalPrice());
+        dcCheckIn.addPropertyChangeListener(e -> calculateTotalPrice());
+        dcCheckOut.addPropertyChangeListener(e -> calculateTotalPrice());
+        formPanel.add(txtTotalPrice, gbc);
         row++;
 
-        JPanel centerPanel = new JPanel(new BorderLayout());
-        centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        centerPanel.add(fieldsPanel, BorderLayout.CENTER);
-        add(centerPanel, BorderLayout.CENTER);
+        // Статус
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        formPanel.add(new JLabel("Статус:"), gbc);
+        gbc.gridx = 1;
+        cbStatus = new JComboBox<>(new String[]{"Забронирован", "Заселен", "Выселен", "Отменен"});
+        cbStatus.setSelectedItem("Забронирован"); // Значение по умолчанию
+        formPanel.add(cbStatus, gbc);
 
-        // Панель кнопок
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-        saveButton = new JButton("Сохранить");
-        cancelButton = new JButton("Отмена");
+        mainPanel.add(formPanel, BorderLayout.CENTER);
 
-        saveButton.setPreferredSize(new Dimension(120, 35));
-        cancelButton.setPreferredSize(new Dimension(120, 35));
+        // Кнопки
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnSave = new JButton("Сохранить");
+        JButton btnCancel = new JButton("Отмена");
 
-        buttonPanel.add(saveButton);
-        buttonPanel.add(cancelButton);
+        btnSave.addActionListener(e -> saveBooking());
+        btnCancel.addActionListener(e -> dispose());
 
-        add(buttonPanel, BorderLayout.SOUTH);
+        buttonPanel.add(btnSave);
+        buttonPanel.add(btnCancel);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Обработчики событий
-        calculateButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                calculatePrice();
-            }
-        });
+        add(mainPanel);
 
-        saveButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                saveBooking();
-            }
-        });
+        // Если режим редактирования - загружаем данные
+        if (isEditMode) {
+            loadBookingData();
+        }
 
-        cancelButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                dispose();
-            }
-        });
-
-        getRootPane().setDefaultButton(saveButton);
-
-        // Автоматический расчет при загрузке
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                calculatePrice();
-            }
-        });
+        // Рассчитать стоимость при загрузке
+        calculateTotalPrice();
     }
 
-    private void loadGuests() {
+    private void calculateTotalPrice() {
         try {
+            Room selectedRoom = (Room) cbRoom.getSelectedItem();
+            Date checkIn = dcCheckIn.getDate();
+            Date checkOut = dcCheckOut.getDate();
+
+            if (selectedRoom != null && checkIn != null && checkOut != null) {
+                // Рассчитываем количество дней
+                long diffInMillis = checkOut.getTime() - checkIn.getTime();
+                long days = diffInMillis / (1000 * 60 * 60 * 24);
+
+                // Минимум 1 день
+                if (days <= 0) {
+                    days = 1;
+                }
+
+                // Рассчитываем общую стоимость как целое число
+                int totalPrice = (int) (selectedRoom.getPrice() * days);
+
+                // Убедимся, что цена не равна 0
+                if (totalPrice <= 0) {
+                    totalPrice = (int) selectedRoom.getPrice();
+                }
+
+                txtTotalPrice.setText(String.valueOf(totalPrice));
+            }
+        } catch (Exception e) {
+            txtTotalPrice.setText("");
+        }
+    }
+
+    private void loadBookingData() {
+        if (booking != null) {
+            // Установить гостя
             List<Guest> guests = guestDAO.getAllGuests();
-            guestCombo.removeAllItems();
-            System.out.println("Загружено гостей: " + guests.size());
-
-            for (Guest guest : guests) {
-                guestCombo.addItem(guest);
+            for (int i = 0; i < guests.size(); i++) {
+                if (guests.get(i).getGuestId() == booking.getGuestId()) {
+                    cbGuest.setSelectedIndex(i);
+                    break;
+                }
             }
 
-            guestCombo.setRenderer(new DefaultListCellRenderer() {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value,
-                                                              int index, boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if (value instanceof Guest) {
-                        Guest guest = (Guest) value;
-                        setText(guest.getMiddleName() + " " + guest.getFirstName() +
-                                " (ID: " + guest.getGuestId() + ")");
-                    }
-                    return this;
-                }
-            });
-
-        } catch (Exception e) {
-            System.err.println("Ошибка при загрузке гостей: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void loadAllRooms() {
-        try {
+            // Установить номер
             List<Room> rooms = roomDAO.getAllRooms();
-            roomCombo.removeAllItems();
-            System.out.println("Загружено номеров: " + rooms.size());
-
-            for (Room room : rooms) {
-                roomCombo.addItem(room);
+            for (int i = 0; i < rooms.size(); i++) {
+                if (rooms.get(i).getId() == booking.getRoomId()) {
+                    cbRoom.setSelectedIndex(i);
+                    break;
+                }
             }
 
-            roomCombo.setRenderer(new DefaultListCellRenderer() {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value,
-                                                              int index, boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if (value instanceof Room) {
-                        Room room = (Room) value;
-                        setText(room.getRoomNumber() + " - " + room.getRoomType() +
-                                " (" + room.getPrice() + " руб./сут, " + room.getStatus() + ")");
-                    }
-                    return this;
+            // Установить сотрудника (только из администраторов)
+            List<Employee> administrators = employeeDAO.getEmployeesByPosition("Administrator");
+            for (int i = 0; i < administrators.size(); i++) {
+                if (administrators.get(i).getId() == booking.getEmployeeId()) {
+                    cbEmployee.setSelectedIndex(i);
+                    break;
                 }
-            });
-
-        } catch (Exception e) {
-            System.err.println("Ошибка при загрузке номеров: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void fillBookingData() {
-        if (editingBooking != null) {
-            try {
-                // Устанавливаем гостя
-                Guest guest = guestDAO.getGuestById(editingBooking.getGuestId());
-                if (guest != null) {
-                    for (int i = 0; i < guestCombo.getItemCount(); i++) {
-                        Guest comboGuest = guestCombo.getItemAt(i);
-                        if (comboGuest.getGuestId() == guest.getGuestId()) {
-                            guestCombo.setSelectedIndex(i);
-                            break;
-                        }
-                    }
-                }
-
-                // Устанавливаем номер
-                Room room = roomDAO.getRoomById(editingBooking.getRoomId());
-                if (room != null) {
-                    for (int i = 0; i < roomCombo.getItemCount(); i++) {
-                        Room comboRoom = roomCombo.getItemAt(i);
-                        if (comboRoom.getId() == room.getId()) {
-                            roomCombo.setSelectedIndex(i);
-                            break;
-                        }
-                    }
-                }
-
-                checkInField.setText(dateFormat.format(editingBooking.getCheckInDate()));
-                checkOutField.setText(dateFormat.format(editingBooking.getCheckOutDate()));
-                statusCombo.setSelectedItem(editingBooking.getStatus());
-                totalPriceField.setText(String.format("%.0f", editingBooking.getTotalPrice()));
-
-            } catch (Exception e) {
-                System.err.println("Ошибка при заполнении данных бронирования: " + e.getMessage());
-                e.printStackTrace();
             }
-        }
-    }
 
-    private void calculatePrice() {
-        try {
-            if (roomCombo.getSelectedItem() == null) {
+            // Если сотрудник не найден в списке администраторов
+            if (cbEmployee.getSelectedItem() == null && administrators.size() > 0) {
+                cbEmployee.setSelectedIndex(0);
                 JOptionPane.showMessageDialog(this,
-                        "Выберите номер для расчета стоимости",
-                        "Ошибка", JOptionPane.WARNING_MESSAGE);
-                return;
+                        "Предыдущий сотрудник не является администратором.\n" +
+                                "Установлен первый доступный администратор.",
+                        "Внимание", JOptionPane.WARNING_MESSAGE);
             }
 
-            Room selectedRoom = (Room) roomCombo.getSelectedItem();
+            dcCheckIn.setDate(booking.getCheckInDate());
+            dcCheckOut.setDate(booking.getCheckOutDate());
 
-            // Парсим даты
-            Date checkIn = dateFormat.parse(checkInField.getText());
-            Date checkOut = dateFormat.parse(checkOutField.getText());
+            // Отображаем целое число
+            txtTotalPrice.setText(String.valueOf((int) booking.getTotalPrice()));
 
-            // Проверяем, что дата выезда позже даты заезда
-            if (!checkOut.after(checkIn)) {
-                JOptionPane.showMessageDialog(this,
-                        "Дата выезда должна быть позже даты заезда",
-                        "Ошибка", JOptionPane.ERROR_MESSAGE);
-                return;
+            // Установить статус
+            String status = booking.getStatus();
+            for (int i = 0; i < cbStatus.getItemCount(); i++) {
+                if (cbStatus.getItemAt(i).equals(status)) {
+                    cbStatus.setSelectedIndex(i);
+                    break;
+                }
             }
-
-            // Рассчитываем количество ночей
-            long diff = checkOut.getTime() - checkIn.getTime();
-            long nights = diff / (1000 * 60 * 60 * 24);
-
-            if (nights <= 0) {
-                nights = 1;
-            }
-
-            // Рассчитываем стоимость (округляем до целого)
-            double totalPrice = selectedRoom.getPrice() * nights;
-            long roundedPrice = Math.round(totalPrice);
-
-            totalPriceField.setText(String.valueOf(roundedPrice));
-
-        } catch (ParseException e) {
-            System.err.println("Неверный формат даты: " + e.getMessage());
-            JOptionPane.showMessageDialog(this,
-                    "Неверный формат даты. Используйте ДД.ММ.ГГГГ",
-                    "Ошибка", JOptionPane.ERROR_MESSAGE);
-        } catch (Exception e) {
-            System.err.println("Ошибка при расчете стоимости: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
     private void saveBooking() {
         try {
-            // Проверка выбора гостя
-            if (guestCombo.getSelectedItem() == null) {
-                JOptionPane.showMessageDialog(this,
-                        "Выберите гостя", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            Guest selectedGuest = (Guest) cbGuest.getSelectedItem();
+            Room selectedRoom = (Room) cbRoom.getSelectedItem();
+            Employee selectedEmployee = (Employee) cbEmployee.getSelectedItem();
+
+            if (selectedGuest == null) {
+                JOptionPane.showMessageDialog(this, "Выберите гостя", "Ошибка", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Проверка выбора номера
-            if (roomCombo.getSelectedItem() == null) {
-                JOptionPane.showMessageDialog(this,
-                        "Выберите номер", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            if (selectedRoom == null) {
+                JOptionPane.showMessageDialog(this, "Выберите номер", "Ошибка", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Получаем выбранные данные
-            Guest selectedGuest = (Guest) guestCombo.getSelectedItem();
-            Room selectedRoom = (Room) roomCombo.getSelectedItem();
+            if (selectedEmployee == null) {
+                JOptionPane.showMessageDialog(this, "Выберите сотрудника", "Ошибка", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
-            // Проверка и парсинг дат
-            Date checkIn, checkOut;
+            if (dcCheckIn.getDate() == null || dcCheckOut.getDate() == null) {
+                JOptionPane.showMessageDialog(this, "Выберите даты заезда и выезда", "Ошибка", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (dcCheckOut.getDate().before(dcCheckIn.getDate())) {
+                JOptionPane.showMessageDialog(this, "Дата выезда должна быть позже даты заезда", "Ошибка", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            int totalPrice;
             try {
-                checkIn = dateFormat.parse(checkInField.getText());
-                checkOut = dateFormat.parse(checkOutField.getText());
+                // Удаляем все нецифровые символы (кроме минуса для отрицательных чисел)
+                String priceText = txtTotalPrice.getText().trim().replaceAll("[^\\d-]", "");
 
-                if (!checkOut.after(checkIn)) {
-                    JOptionPane.showMessageDialog(this,
-                            "Дата выезда должна быть позже даты заезда",
-                            "Ошибка", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-            } catch (ParseException e) {
-                JOptionPane.showMessageDialog(this,
-                        "Неверный формат даты. Используйте ДД.ММ.ГГГГ",
-                        "Ошибка", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            // Проверка стоимости
-            double totalPrice;
-            try {
-                totalPrice = Double.parseDouble(totalPriceField.getText());
+                totalPrice = Integer.parseInt(priceText);
 
                 if (totalPrice <= 0) {
-                    JOptionPane.showMessageDialog(this,
-                            "Стоимость должна быть больше 0",
-                            "Ошибка", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Стоимость должна быть больше 0", "Ошибка", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
+
             } catch (NumberFormatException e) {
                 JOptionPane.showMessageDialog(this,
-                        "Неверный формат стоимости. Используйте целое число",
+                        "Введите корректную стоимость (целое число, например: 1500)",
                         "Ошибка", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            String status = (String) statusCombo.getSelectedItem();
-
-            System.out.println("Сохранение бронирования:");
-            System.out.println("Гость ID: " + selectedGuest.getGuestId());
-            System.out.println("Номер ID: " + selectedRoom.getId());
-            System.out.println("Статус: " + status);
-            System.out.println("Стоимость: " + totalPrice);
-
-            // Проверка доступности номера (только для новых бронирований)
             if (!isEditMode) {
-                boolean isAvailable = bookingDAO.isRoomAvailable(selectedRoom.getId(), checkIn, checkOut);
-                if (!isAvailable) {
-                    JOptionPane.showMessageDialog(this,
-                            "Номер " + selectedRoom.getRoomNumber() + " недоступен на выбранные даты",
-                            "Ошибка", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-            } else {
-                // При редактировании проверяем доступность, исключая текущее бронирование
-                boolean isAvailable = bookingDAO.isRoomAvailable(selectedRoom.getId(), checkIn, checkOut, editingBooking.getId());
-                if (!isAvailable) {
-                    JOptionPane.showMessageDialog(this,
-                            "Номер " + selectedRoom.getRoomNumber() + " недоступен на выбранные даты",
-                            "Ошибка", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
+                booking = new Booking();
             }
 
-            // Создаем бронирование
-            Booking booking = new Booking();
             booking.setGuestId(selectedGuest.getGuestId());
             booking.setRoomId(selectedRoom.getId());
-            booking.setCheckInDate(checkIn);
-            booking.setCheckOutDate(checkOut);
-            booking.setStatus(status);
-            booking.setTotalPrice(totalPrice);
+            booking.setEmployeeId(selectedEmployee.getId());
+            booking.setCheckInDate(dcCheckIn.getDate());
+            booking.setCheckOutDate(dcCheckOut.getDate());
+            booking.setTotalPrice(totalPrice); // Сохраняем как целое число
+            booking.setStatus((String) cbStatus.getSelectedItem());
 
-            if (isEditMode && editingBooking != null) {
-                // РЕДАКТИРОВАНИЕ - используем updateBooking с ID
-                booking.setId(editingBooking.getId());
+            if (isEditMode) {
                 bookingDAO.updateBooking(booking);
-
-                // Синхронизация статуса комнаты после редактирования
-                if ("Выселен".equals(status) || "Отменен".equals(status)) {
-                    // Если бронирование завершено или отменено, освобождаем номер
-                    roomDAO.updateRoomStatus(selectedRoom.getId(), "Свободен");
-                } else if ("Заселен".equals(status)) {
-                    roomDAO.updateRoomStatus(selectedRoom.getId(), "Занят");
-                } else if ("Забронирован".equals(status)) {
-                    roomDAO.updateRoomStatus(selectedRoom.getId(), "Забронирован");
-                }
-
-                JOptionPane.showMessageDialog(this,
-                        "Бронирование успешно обновлено",
-                        "Успех", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Бронирование обновлено", "Успех", JOptionPane.INFORMATION_MESSAGE);
             } else {
-                // СОЗДАНИЕ НОВОГО
                 bookingDAO.addBooking(booking);
-
-                // Обновляем статус номера при создании
-                if ("Забронирован".equals(status) || "Заселен".equals(status)) {
-                    roomDAO.updateRoomStatus(selectedRoom.getId(), "Занят");
-                }
-
-                JOptionPane.showMessageDialog(this,
-                        "Бронирование создано успешно! ID: " + booking.getId(),
-                        "Успех", JOptionPane.INFORMATION_MESSAGE);
-            }
-
-            // Обновляем таблицы в главном окне
-            if (mainWindow != null) {
-                mainWindow.refreshRoomsTable();
-                mainWindow.refreshBookingsTable();
-                System.out.println("Таблицы обновлены");
+                JOptionPane.showMessageDialog(this, "Бронирование создано", "Успех", JOptionPane.INFORMATION_MESSAGE);
             }
 
             dispose();
 
         } catch (Exception e) {
-            System.err.println("Ошибка при сохранении бронирования: " + e.getMessage());
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this,
-                    "Ошибка при сохранении: " + e.getMessage(),
+            JOptionPane.showMessageDialog(this, "Ошибка при сохранении: " + e.getMessage(),
                     "Ошибка", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
         }
+    }
+
+    private boolean isAdministrator(Employee employee) {
+        return employee != null && "Administrator".equals(employee.getPositionName());
     }
 }

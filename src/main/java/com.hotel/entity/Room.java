@@ -88,4 +88,13 @@ public class Room {
     public void setDescription(String description) {
         this.description = description;
     }
+
+    public int getPriceAsInt() {
+        return (int) price;
+    }
+
+    // Для использования в расчетах
+    public int getPriceForCalculation() {
+        return (int) Math.round(price); // Округление до ближайшего целого
+    }
 }

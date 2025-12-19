@@ -248,7 +248,7 @@ public class GuestDialog extends JDialog {
     private void fillGuestData() {
         if (editingGuest != null) {
             surnameField.setText(editingGuest.getMiddleName());
-            nameField.setText(editingGuest.getFirstName());
+            nameField.setText(editingGuest.getName());
             patronymicField.setText(editingGuest.getLastName());
             passportSeriesField.setText(editingGuest.getPassportSeries());
             passportNumberField.setText(editingGuest.getPassportNumber());
@@ -302,7 +302,7 @@ public class GuestDialog extends JDialog {
         try {
             Guest guest = new Guest();
             guest.setMiddleName(surnameField.getText().trim());
-            guest.setFirstName(nameField.getText().trim());
+            guest.setName(nameField.getText().trim());
             guest.setLastName(patronymicField.getText().trim());
             guest.setPassportSeries(passportSeriesField.getText().trim());
             guest.setPassportNumber(passportNumberField.getText().trim());

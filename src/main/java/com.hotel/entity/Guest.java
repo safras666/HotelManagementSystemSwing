@@ -4,9 +4,9 @@ import java.util.Date;
 
 public class Guest {
     private int guestId;
-    private String lastName;
-    private String firstName;
-    private String middleName;
+    private String surname;
+    private String name;
+    private String patronymic;
     private String passportSeries;
     private String passportNumber;
     private Date dateOfBirth;
@@ -20,8 +20,8 @@ public class Guest {
 
     // Конструктор с основными параметрами
     public Guest(String lastName, String firstName, String passportNumber) {
-        this.lastName = lastName;
-        this.firstName = firstName;
+        this.surname = lastName;
+        this.name = firstName;
         this.passportNumber = passportNumber;
     }
 
@@ -29,9 +29,9 @@ public class Guest {
     public Guest(String lastName, String firstName, String middleName,
                  String passportSeries, String passportNumber, Date dateOfBirth,
                  String phoneNumber, String email, String address) {
-        this.lastName = lastName;
-        this.firstName = firstName;
-        this.middleName = middleName;
+        this.surname = lastName;
+        this.name = firstName;
+        this.patronymic = middleName;
         this.passportSeries = passportSeries;
         this.passportNumber = passportNumber;
         this.dateOfBirth = dateOfBirth;
@@ -44,14 +44,14 @@ public class Guest {
     public int getGuestId() { return guestId; }
     public void setGuestId(int guestId) { this.guestId = guestId; }
 
-    public String getLastName() { return lastName; }
-    public void setLastName(String lastName) { this.lastName = lastName; }
+    public String getMiddleName() { return surname; }
+    public void setMiddleName(String middleName) { this.surname = middleName; }
 
-    public String getFirstName() { return firstName; }
-    public void setFirstName(String firstName) { this.firstName = firstName; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getMiddleName() { return middleName; }
-    public void setMiddleName(String middleName) { this.middleName = middleName; }
+    public String getLastName() { return patronymic; }
+    public void setLastName(String lastName) { this.patronymic = lastName; }
 
     public String getPassportSeries() { return passportSeries; }
     public void setPassportSeries(String passportSeries) { this.passportSeries = passportSeries; }
@@ -76,6 +76,6 @@ public class Guest {
 
     @Override
     public String toString() {
-        return lastName + " " + firstName + " " + (middleName != null ? middleName : "");
+        return surname + " " + name + " " + (patronymic != null ? patronymic : "");
     }
 }

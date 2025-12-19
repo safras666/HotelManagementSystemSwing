@@ -271,18 +271,21 @@ public class RoomDialog extends JDialog {
         // Проверка цены
         double price;
         try {
-            price = Double.parseDouble(priceField.getText().trim());
+            String priceText = priceField.getText().trim().replaceAll("[^\\d]", "");
+            price = Double.parseDouble(priceText);
             if (price <= 0) {
                 JOptionPane.showMessageDialog(this, "Цена должна быть больше 0", "Ошибка", JOptionPane.ERROR_MESSAGE);
                 priceField.requestFocus();
                 return;
             }
+            // Округляем до целого
+            price = Math.round(price);
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Неверный формат цены", "Ошибка", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Неверный формат цены. Введите целое число", "Ошибка", JOptionPane.ERROR_MESSAGE);
             priceField.requestFocus();
             return;
         }
-
+        priceField.setText(String.valueOf((int) editingRoom.getPrice()));
         try {
             Room room = new Room();
             room.setRoomNumber(roomNumberField.getText().trim());

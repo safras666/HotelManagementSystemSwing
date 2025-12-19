@@ -28,7 +28,7 @@ public class DatabaseConnection {
 
     public static void initializeDatabase() {
         // Сначала создаем базу данных, если она не существует
-        String createDbUrl = "jdbc:mysql://localhost:3306/?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8";
+        String createDbUrl = "jdbc:mysql://localhost:3306/hotel_db?useUnicode=true&characterEncoding=UTF-8";
 
         try (Connection conn = DriverManager.getConnection(createDbUrl, USER, PASSWORD);
              Statement stmt = conn.createStatement()) {
